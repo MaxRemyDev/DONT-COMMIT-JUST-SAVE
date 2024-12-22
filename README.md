@@ -18,7 +18,7 @@ A VS Code extension that blocks git pushes containing commits with 'DONT COMMIT 
 
 ## Requirements
 
-- VS Code 1.63.0 or higher
+- VS Code 1.85.0 or higher
 - Git installed on your system
 
 ## Extension Settings
@@ -31,9 +31,14 @@ None at the moment.
 
 ## Release Notes
 
-### 1.0.0
+### 1.0.2
+- updated: minimum vscode version to 1.85.0 for better compatibility
 
-Initial release of Don't Commit Just Save
+### 1.0.1
+- added: image to the extension
+
+### 1.0.0
+- added: initial project vscode extension
 
 ## License
 
