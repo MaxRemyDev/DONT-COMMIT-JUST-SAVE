@@ -1,0 +1,73 @@
+{
+  "name": "dont-commit-just-save",
+  "displayName": "DONT COMMIT JUST SAVE",
+  "description": "Blocks git pushes containing commits with 'DONT COMMIT JUST SAVE' message",
+  "version": "1.0.1",
+  "publisher": "MaxRemyDev",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other",
+    "SCM Providers"
+  ],
+  "keywords": [
+    "git",
+    "commit",
+    "push",
+    "block",
+    "save"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:.git"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.blockCommitPush",
+        "title": "Check Commits Before Push"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "extension.blockCommitPush",
+          "when": "gitOpenRepository"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.96.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BabylooPro/dont-commit-just-save"
+  },
+  "bugs": {
+    "url": "https://github.com/BabylooPro/dont-commit-just-save/issues"
+  },
+  "license": "MIT"
+}
