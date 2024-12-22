@@ -1,0 +1,31 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+.DS_Store
+# IDE specific files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# Optional npm cache directory
+.npm
+# Optional eslint cache
+.eslintcache
+# TypeScript cache
+*.tsbuildinfo
+# Coverage directory used by tools like istanbul
+coverage
+# Compiled binary addons
+build/Release
+# Config files
+.env
