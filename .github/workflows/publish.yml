@@ -25,6 +25,11 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Setup Git
+        run: |
+          git config --global user.name "BabylooPro"
+          git config --global user.email "babyloopro@gmail.com"
+
       - name: Install dependencies
         run: npm ci
 
