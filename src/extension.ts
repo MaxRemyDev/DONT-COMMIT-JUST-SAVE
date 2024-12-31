@@ -55,6 +55,18 @@ export async function activate(context: vscode.ExtensionContext) {
         setupGitHook(folder.uri.fsPath);
     });
 
+    // REGISTER COMMAND TO INSERT "DONT COMMIT JUST SAVE"
+    let disposable = vscode.commands.registerCommand('extension.insertDontCommit', () => {
+        const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
+        const git = gitExtension.getAPI(1);
+
+        if (git.repositories.length > 0) {
+            const repo = git.repositories[0];
+            repo.inputBox.value = "DONT COMMIT JUST SAVE";
+        }
+    });
+    context.subscriptions.push(disposable);
+
     // WATCH FOR NEW WORKSPACES
     context.subscriptions.push(
         vscode.workspace.onDidChangeWorkspaceFolders(event => {
@@ -98,4 +110,4 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearInterval(interval) }); // CLEAR INTERVAL ON DISPOSE
 }
 
-export function deactivate() {}
+export function deactivate() { }

@@ -2,7 +2,7 @@
   "name": "dont-commit-just-save",
   "displayName": "DONT COMMIT JUST SAVE",
   "description": "Blocks git pushes containing commits with 'DONT COMMIT JUST SAVE' message",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "MaxRemyDev",
   "icon": "icon.png",
   "engines": {
@@ -32,6 +32,11 @@
       {
         "command": "extension.blockCommitPush",
         "title": "Check Commits Before Push"
+      },
+      {
+        "command": "extension.insertDontCommit",
+        "title": "Insert DONT COMMIT JUST SAVE",
+        "icon": "$(save)"
       }
     ],
     "menus": {
@@ -39,6 +44,13 @@
         {
           "command": "extension.blockCommitPush",
           "when": "gitOpenRepository"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "extension.insertDontCommit",
+          "group": "navigation@1",
+          "when": "scmProvider == git"
         }
       ]
     }
