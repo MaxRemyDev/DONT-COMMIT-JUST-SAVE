@@ -4,9 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // UTILITY FUNCTION TO RUN GIT COMMANDS
-const runCommand = (cmd: string): Promise<string> =>
+const runCommand = (cmd: string, cwd?: string): Promise<string> =>
     new Promise((resolve, reject) => {
-        exec(cmd, (error, stdout, stderr) => {
+        exec(cmd, { cwd }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(stderr || error.message));
                 return;
@@ -66,6 +66,82 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
     context.subscriptions.push(disposable);
+
+    // REGISTER COMMAND TO RESET "DONT COMMIT JUST SAVE" COMMITS
+    let resetDisposable = vscode.commands.registerCommand('extension.resetDontCommit', async () => {
+        const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
+        const git = gitExtension.getAPI(1);
+
+        if (git.repositories.length > 0) {
+            try {
+                const repo = git.repositories[0];
+                const repoPath = repo.rootUri.fsPath;
+
+                // GET CURRENT BRANCH NAME
+                const currentBranch = await runCommand('git rev-parse --abbrev-ref HEAD', repoPath);
+
+                // GET THE LAST PUSHED COMMIT HASH
+                let lastPushedCommit;
+                try {
+                    lastPushedCommit = await runCommand(`git rev-parse origin/${currentBranch}`, repoPath);
+                } catch (e) {
+                    // IF NO REMOTE TRACKING, GET THE FIRST COMMIT
+                    lastPushedCommit = await runCommand('git rev-list --max-parents=0 HEAD', repoPath);
+                }
+
+                // GET ALL COMMITS BETWEEN LAST PUSHED AND HEAD
+                const allCommits = await runCommand(`git rev-list HEAD ${lastPushedCommit ? `^${lastPushedCommit}` : ''}`, repoPath);
+                const allCommitsList = allCommits.split('\n').filter(c => c);
+
+                if (allCommitsList.length > 0) {
+                    // GET COMMIT MESSAGES FOR EACH COMMIT
+                    const commitMessages = await Promise.all(
+                        allCommitsList.map(hash =>
+                            runCommand(`git log -1 --format=%B ${hash}`, repoPath)
+                        )
+                    );
+
+                    // FIND COMMITS WITH DONT COMMIT JUST SAVE MESSAGE
+                    const dontCommitHashes = allCommitsList.filter((hash, index) =>
+                        commitMessages[index].includes('DONT COMMIT JUST SAVE')
+                    );
+
+                    if (dontCommitHashes.length > 0) {
+                        // GET ALL COMMITS THAT ARE NOT DONT COMMIT JUST SAVE
+                        const normalCommits = allCommitsList.filter(hash => !dontCommitHashes.includes(hash));
+
+                        // RESET TO THE LAST PUSHED COMMIT
+                        await runCommand(`git reset --hard ${lastPushedCommit}`, repoPath);
+
+                        // CHERRY PICK ALL NORMAL COMMITS
+                        if (normalCommits.length > 0) {
+                            for (const commit of normalCommits.reverse()) {
+                                await runCommand(`git cherry-pick ${commit}`, repoPath);
+                            }
+                        }
+
+                        // STAGE ALL THE CHANGES FROM DONT COMMIT JUST SAVE COMMITS
+                        for (const commit of dontCommitHashes) {
+                            // GET THE CHANGES AND APPLY THEM DIRECTLY TO INDEX
+                            await runCommand(`git diff ${commit}^ ${commit} | git apply --index --cached`, repoPath);
+                        }
+
+                        // RESET THE WORKING DIRECTORY TO MATCH INDEX
+                        await runCommand('git checkout .', repoPath);
+
+                        vscode.window.showInformationMessage(`Successfully reset ${dontCommitHashes.length} local DONT COMMIT JUST SAVE commits while preserving other commits`);
+                    } else {
+                        vscode.window.showInformationMessage('No local DONT COMMIT JUST SAVE commits found');
+                    }
+                } else {
+                    vscode.window.showInformationMessage('No local commits found');
+                }
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`Failed to reset commits: ${error}`);
+            }
+        }
+    });
+    context.subscriptions.push(resetDisposable);
 
     // WATCH FOR NEW WORKSPACES
     context.subscriptions.push(

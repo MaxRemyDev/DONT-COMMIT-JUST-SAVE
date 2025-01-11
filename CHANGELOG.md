@@ -2,7 +2,13 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
-## [1.0.3] - 2024-12-31
+## [1.1.1] - 2025-01-11
+
+### Added
+
+- Reset button in Source Control view to reset DONT COMMIT JUST SAVE commits while preserving other commits
+
+## [1.1.0] - 2024-12-31
 
 ### Added
 

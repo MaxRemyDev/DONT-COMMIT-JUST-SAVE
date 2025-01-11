@@ -10,6 +10,7 @@ A VSCode extension that blocks git pushes containing commits with 'DONT COMMIT J
 - Shows a clear modal dialog in VS Code when a push is blocked
 - Works with all git commands (VS Code UI, terminal, external git clients)
 - Quick insert button in Source Control view to add "DONT COMMIT JUST SAVE" message
+- Reset button to safely remove DONT COMMIT JUST SAVE commits while preserving other commits
 - No configuration needed
 
 ## Usage
@@ -19,6 +20,7 @@ A VSCode extension that blocks git pushes containing commits with 'DONT COMMIT J
 3. Use the save button (💾) in the Source Control title bar to quickly insert "DONT COMMIT JUST SAVE"
 4. If you try to push a commit containing 'DONT COMMIT JUST SAVE' in its message, the push will be blocked
 5. You'll see a modal dialog in VS Code explaining why the push was blocked
+6. Use the history button (🕒) to reset DONT COMMIT JUST SAVE commits while keeping other commits intact
 
 ## Requirements
 
