@@ -2,7 +2,25 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
-## [1.1.1] - 2025-01-11
+## [1.1.3] - 2025-01-14
+
+### Added
+
+- Reset history feature to track and undo recent DONT COMMIT JUST SAVE resets
+- New button in Source Control view to show reset history
+- Ability to undo recent resets while preserving changes
+- Warning dialog before reset operation to explain risks and potential conflicts
+- Detailed explanation of reset process and its consequences
+- Clear indication of undo possibility through Reset History
+- Detailed operation logs showing all git commands and their execution times
+- Show Details button in notifications to view operation logs
+- Real-time logging of reset and restore operations
+- Simplified log view for better readability
+- Automatic detection and blocking of patch conflicts
+- Smart conflict detection for merge conflicts and patch failures
+- Detailed error messages with conflict locations and suggestions
+
+## [1.1.2] - 2025-01-11
 
 ### Added
 
