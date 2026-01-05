@@ -1,55 +1,49 @@
 name: Publish Extension
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to publish (patch, minor, major)"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch # 0.0.1 -> 0.0.2 -> 0.1.0 -> 0.1.1 -> 0.1.2
-          - minor # 0.0.1 -> 0.1.0 -> 1.0.0 -> 1.1.0 -> 1.2.0
-          - major # 0.0.1 -> 1.0.0 -> 2.0.0 -> 2.1.0 -> 2.2.0
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Version to publish"
+                required: true
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    publish:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
 
-      - name: Setup Git
-        run: |
-          git config --global user.name "BabylooPro"
-          git config --global user.email "babyloopro@gmail.com"
+            - name: Setup Git
+              run: |
+                  git config --global user.name "BabylooPro"
+                  git config --global user.email "babyloopro@gmail.com"
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Compile
-        run: npm run compile
+            - name: Compile
+              run: npm run compile
 
-      - name: Run tests
-        run: npm test
+            - name: Run tests
+              run: npm test
 
-      - name: Install vsce
-        run: npm install -g @vscode/vsce
+            - name: Install vsce
+              run: npm install -g @vscode/vsce
 
-      - name: Install ovsx
-        run: npm install -g ovsx
+            - name: Install ovsx
+              run: npm install -g ovsx
 
-      - name: Publish to VS Code Marketplace
-        run: vsce publish ${{ github.event.inputs.version }}
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+            - name: Publish to VS Code Marketplace
+              run: vsce publish ${{ github.event.inputs.version }}
+              env:
+                  VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      - name: Publish to Open VSX Registry
-        run: ovsx publish -p ${{ secrets.OVSX_PAT }}
-        continue-on-error: true
+            - name: Publish to Open VSX Registry
+              run: ovsx publish -p ${{ secrets.OVSX_PAT }}
+              continue-on-error: true
