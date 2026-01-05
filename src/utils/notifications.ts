@@ -33,6 +33,7 @@ export const showNotification = async (type: NotificationType, message: string, 
     } else if (type === 'warning') {
         return vscode.window.showWarningMessage(message, { detail: details, modal: true }, { title: 'Proceed' });
     } else {
-        return vscode.window.showErrorMessage(message, { detail: details, modal: true }).then(selection => selection as { title: string } | undefined);
+        await vscode.window.showErrorMessage(message, { detail: details, modal: true });
+        return undefined;
     }
 };

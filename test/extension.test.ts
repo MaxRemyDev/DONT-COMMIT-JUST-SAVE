@@ -4,6 +4,8 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { activate, deactivate } from '../src/extension';
 
+const childProcess = require('node:child_process') as typeof import('node:child_process');
+
 suite('Extension Tests', () => {
     let sandbox: sinon.SinonSandbox;
     let context: vscode.ExtensionContext;
@@ -71,6 +73,23 @@ suite('Extension Tests', () => {
         assert.ok(registerCommandStub.called);
         const registeredCommand = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.insertDontCommit');
         assert.ok(registeredCommand, 'insertDontCommit command should be registered');
+    });
+
+    // TEST FOR SOFT RESET COMMAND REGISTRATION
+    test('activate should register softResetHead command', async () => {
+        // ARRANGE - SETUP STUBS
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        sandbox.stub(vscode.extensions, 'getExtension');
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+
+        // ACT - ACTIVATE EXTENSION
+        await activate(context);
+
+        // ASSERT - VERIFY COMMAND REGISTERED
+        assert.ok(registerCommandStub.called);
+        const registeredCommand = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(registeredCommand, 'softResetHead command should be registered');
     });
 
     // TEST FOR GIT HOOKS SETUP ON WORKSPACE FOLDERS
@@ -143,5 +162,57 @@ suite('Extension Tests', () => {
 
         // ASSERT - VERIFY INPUT BOX VALUE SET
         assert.strictEqual(mockRepo.inputBox.value, 'DONT COMMIT JUST SAVE');
+    });
+
+    // TEST FOR SOFT RESET HEAD COMMAND SUCCESS PATH
+    test('softResetHead command should run git reset --soft HEAD~N', async () => {
+        // ARRANGE - SETUP STUBS AND CREATE MOCK GIT REPOSITORY
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        sandbox.stub(vscode.window, 'showInputBox').resolves('2');
+        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Reset' } as any);
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+
+        const execSyncStub = sandbox.stub(childProcess, 'execSync').returns(Buffer.from(''));
+
+        // ACT - ACTIVATE AND EXECUTE COMMAND
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall, 'softResetHead command should be registered');
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - VERIFY COMMAND EXECUTED
+        assert.ok(execSyncStub.calledOnce);
+        const [cmd, opts] = execSyncStub.getCall(0).args as [string, { cwd?: string; stdio?: any }];
+        assert.strictEqual(cmd, 'git reset --soft HEAD~2');
+        assert.strictEqual(opts.cwd, '/test/repo');
+    });
+
+    // TEST FOR SOFT RESET HEAD COMMAND CANCEL AT INPUT
+    test('softResetHead command should not run if input is cancelled', async () => {
+        // ARRANGE - SETUP STUBS AND CREATE MOCK GIT REPOSITORY
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        sandbox.stub(vscode.window, 'showInputBox').resolves(undefined);
+        const execSyncStub = sandbox.stub(childProcess, 'execSync').returns(Buffer.from(''));
+
+        // ACT - ACTIVATE AND EXECUTE COMMAND
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall, 'softResetHead command should be registered');
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - VERIFY COMMAND NOT EXECUTED
+        assert.ok(execSyncStub.notCalled);
     });
 });

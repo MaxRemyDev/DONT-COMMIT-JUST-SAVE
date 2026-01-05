@@ -1,79 +1,90 @@
 {
-  "name": "dont-commit-just-save",
-  "displayName": "DONT COMMIT JUST SAVE",
-  "description": "Blocks git pushes containing commits with 'DONT COMMIT JUST SAVE' message",
-  "version": "1.1.2",
-  "publisher": "MaxRemyDev",
-  "icon": "icon.png",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "Other",
-    "SCM Providers"
-  ],
-  "keywords": [
-    "git",
-    "commit",
-    "push",
-    "block",
-    "save"
-  ],
-  "activationEvents": [
-    "onStartupFinished",
-    "workspaceContains:.git"
-  ],
-  "extensionDependencies": [
-    "vscode.git"
-  ],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "extension.insertDontCommit",
-        "title": "Insert DONT COMMIT JUST SAVE",
-        "icon": "$(save)"
-      }
+    "name": "dont-commit-just-save",
+    "displayName": "DONT COMMIT JUST SAVE",
+    "description": "Blocks git pushes containing commits with 'DONT COMMIT JUST SAVE' message",
+    "version": "1.1.2",
+    "publisher": "MaxRemyDev",
+    "icon": "icon.png",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other",
+        "SCM Providers"
     ],
-    "menus": {
-      "scm/title": [
-        {
-          "command": "extension.insertDontCommit",
-          "group": "navigation@1",
-          "when": "scmProvider == git"
+    "keywords": [
+        "git",
+        "commit",
+        "push",
+        "block",
+        "save"
+    ],
+    "activationEvents": [
+        "onStartupFinished",
+        "workspaceContains:.git"
+    ],
+    "extensionDependencies": [
+        "vscode.git"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "extension.insertDontCommit",
+                "title": "Insert DONT COMMIT JUST SAVE",
+                "icon": "$(save)"
+            },
+            {
+                "command": "extension.softResetHead",
+                "title": "Soft Reset (HEAD~N)",
+                "icon": "$(history)"
+            }
+        ],
+        "menus": {
+            "scm/title": [
+                {
+                    "command": "extension.insertDontCommit",
+                    "group": "navigation@1",
+                    "when": "scmProvider == git"
+                },
+                {
+                    "command": "extension.softResetHead",
+                    "group": "navigation@2",
+                    "when": "scmProvider == git"
+                }
+            ]
         }
-      ]
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
-    "@types/sinon": "^17.0.0",
-    "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^8.17.0",
-    "@typescript-eslint/parser": "^8.17.0",
-    "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1",
-    "eslint": "^9.16.0",
-    "glob": "^11.0.0",
-    "mocha": "^10.0.0",
-    "sinon": "^17.0.0",
-    "typescript": "^5.7.2"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/BabylooPro/dont-commit-just-save"
-  },
-  "bugs": {
-    "url": "https://github.com/BabylooPro/dont-commit-just-save/issues"
-  },
-  "license": "MIT"
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "compile:test": "tsc -p ./tsconfig.test.json",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run compile:test && npm run lint",
+        "lint": "eslint src",
+        "test": "vscode-test"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.10",
+        "@types/node": "20.x",
+        "@types/sinon": "^17.0.0",
+        "@types/vscode": "^1.85.0",
+        "@typescript-eslint/eslint-plugin": "^8.17.0",
+        "@typescript-eslint/parser": "^8.17.0",
+        "@vscode/test-cli": "^0.0.10",
+        "@vscode/test-electron": "^2.4.1",
+        "eslint": "^9.16.0",
+        "glob": "^11.0.0",
+        "mocha": "^10.0.0",
+        "sinon": "^17.0.0",
+        "typescript": "^5.7.2"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/BabylooPro/dont-commit-just-save"
+    },
+    "bugs": {
+        "url": "https://github.com/BabylooPro/dont-commit-just-save/issues"
+    },
+    "license": "MIT"
 }
