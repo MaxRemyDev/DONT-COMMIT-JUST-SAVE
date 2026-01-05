@@ -1,9 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-
-// LOGGING UTILITIES
-export const LOG_FILE = path.join(os.tmpdir(), 'dont-commit-just-save.md');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 export interface LogEntry {
     timestamp: string;
@@ -14,12 +11,10 @@ export interface LogEntry {
     duration?: number;
 }
 
+export const LOG_FILE = path.join(os.tmpdir(), 'dont-commit-just-save.md');
+
 export const logToFile = async (entry: LogEntry) => {
-    const icon = {
-        success: '✅',
-        warning: '⚠️',
-        error: '❌'
-    }[entry.type];
+    const icon = { success: '✅', warning: '⚠️', error: '❌' }[entry.type];
 
     // CREATE OR CLEAR LOG FILE AT START OF OPERATION
     if (entry.message.includes('Warning: This operation can be risky!')) {

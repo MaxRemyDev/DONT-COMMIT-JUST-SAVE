@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { showNotification } from './utils/notifications';
 import { setupGitHook } from './services/gitHooks';
 
@@ -20,22 +20,21 @@ export async function activate(context: vscode.ExtensionContext) {
             repo.inputBox.value = "DONT COMMIT JUST SAVE";
         }
     });
-    context.subscriptions.push(disposable);
 
     // WATCH FOR NEW WORKSPACES
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeWorkspaceFolders(event => {
-            event.added.forEach(folder => {
-                setupGitHook(folder.uri.fsPath);
-            });
-        })
-    );
+    const workspaceWatcher = vscode.workspace.onDidChangeWorkspaceFolders(event => {
+        event.added.forEach(folder => {
+            setupGitHook(folder.uri.fsPath);
+        });
+    });
+
+    context.subscriptions.push(disposable, workspaceWatcher);
 
     let isShowingError = false; // CHECK IF ERROR IS BEING SHOWN
 
     // MONITOR FOR BLOCKED PUSHES
     const interval = setInterval(async () => {
-        if (isShowingError) return; // RETURN IF ERROR IS BEING SHOWN
+        if (isShowingError) { return; } // RETURN IF ERROR IS BEING SHOWN 
 
         // CHECK FOR BLOCKED PUSHES
         for (const folder of vscode.workspace.workspaceFolders || []) {
@@ -62,4 +61,6 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearInterval(interval) });
 }
 
-export function deactivate() { }
+export function deactivate() {
+    // NO CLEANUP NEEDED
+}
