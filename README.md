@@ -29,7 +29,7 @@ A VSCode extension that blocks git pushes containing commits with 'DONT COMMIT J
 
 For local testing and development, see [Local Testing Guide](docs/LOCAL_TESTING.md).
 
-For publishing to the VS Code Marketplace, see [Publishing Guide](docs/PUBLISHING.md).
+For publishing to the VS Code Marketplace and Open VSX Registry, see [Publishing Guide](docs/PUBLISHING.md).
 
 ## Extension Settings
 
