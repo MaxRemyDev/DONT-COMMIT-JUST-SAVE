@@ -13,8 +13,8 @@ code .  # Open in VS Code
 
 A new VS Code window opens. Test in a Git project:
 
--   **Command Palette** : "Insert DONT COMMIT JUST SAVE"
--   **SCM Bar** : Buttons in Source Control
+- **Command Palette** : "Insert DONT COMMIT JUST SAVE"
+- **SCM Bar** : Buttons in Source Control
 
 ## Local Installation
 
@@ -31,14 +31,20 @@ npm run watch  # Auto recompilation
 # Then F5 for debug
 ```
 
+## Unit Test
+
+```bash
+npm test # test with vscode-test
+```
+
 ## Debug
 
--   **Logs** : Palette → "Developer: Show Logs" → "Extension Host"
--   **Breakpoints** : In TypeScript code
--   **Restart** : F5 after modification
+- **Logs** : Palette → "Developer: Show Logs" → "Extension Host"
+- **Breakpoints** : In TypeScript code
+- **Restart** : F5 after modification
 
 ## Issues
 
--   **Extension not loading** : Check `out/extension.js`
--   **Missing commands** : Check `.git` folder
--   **Errors** : `npm run lint` + `npm run compile`
+- **Extension not loading** : Check `out/extension.js`
+- **Missing commands** : Check `.git` folder
+- **Errors** : `npm run lint` + `npm run compile`
