@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import { LOG_FILE, logToFile, LogEntry } from './logging';
+import { NotificationType, LogType } from '../types';
 
-export const showNotification = async (type: 'info' | 'warning' | 'error', message: string, details?: string, showDetailsButton: boolean = false): Promise<{ title: string } | undefined> => {
+export const showNotification = async (type: NotificationType, message: string, details?: string, showDetailsButton: boolean = false): Promise<{ title: string } | undefined> => {
     const now = new Date().toLocaleString();
 
-    let logType: 'success' | 'warning' | 'error';
-    const typeMap: Record<'info' | 'warning' | 'error', 'success' | 'warning' | 'error'> = {
+    let logType: LogType;
+    const typeMap: Record<NotificationType, LogType> = {
         info: 'success',
         warning: 'warning',
         error: 'error',
@@ -32,6 +33,6 @@ export const showNotification = async (type: 'info' | 'warning' | 'error', messa
     } else if (type === 'warning') {
         return vscode.window.showWarningMessage(message, { detail: details, modal: true }, { title: 'Proceed' });
     } else {
-        return vscode.window.showErrorMessage(message, { detail: details, modal: false }).then(selection => selection as { title: string } | undefined);
+        return vscode.window.showErrorMessage(message, { detail: details, modal: true }).then(selection => selection as { title: string } | undefined);
     }
 };

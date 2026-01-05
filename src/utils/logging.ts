@@ -1,10 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { LogType } from '../types';
 
 export interface LogEntry {
     timestamp: string;
-    type: 'success' | 'warning' | 'error';
+    type: LogType;
     message: string;
     details?: string;
     command?: string;
