@@ -118,47 +118,6 @@ export async function activate(context: vscode.ExtensionContext) {
         event.added.forEach(folder => setupGitHook(folder.uri.fsPath));
     });
 
-    // WATCH FOR GIT REPOSITORY CHANGES (DETECT PULLS)
-    const checkCommitsAfterPull = async () => {
-        const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-        if (!gitExtension) { return; }
-
-        const git = gitExtension.getAPI(1);
-        for (const repo of git.repositories) {
-            const workspaceFolder = vscode.workspace.getWorkspaceFolder(repo.rootUri);
-            if (!workspaceFolder) { continue; }
-
-            try {
-                // CHECK FOR NEWLY PULLED COMMITS
-                let commits = '';
-                try {
-                    // TRY TO GET COMMITS BETWEEN ORIG_HEAD AND HEAD (ORIG_HEAD IS SET BY GIT PULL)
-                    commits = childProcess.execSync('git log ORIG_HEAD..HEAD --pretty=%B', { cwd: workspaceFolder.uri.fsPath, encoding: 'utf8' });
-                } catch {
-                    // IF ORIG_HEAD DOESN'T EXIST, CHECK LAST 5 COMMITS (FALLBACK)
-                    commits = childProcess.execSync('git log -5 --pretty=%B', { cwd: workspaceFolder.uri.fsPath, encoding: 'utf8' });
-                }
-
-                if (commits.includes('DONT COMMIT JUST SAVE')) {
-                    const pullFile = path.join(workspaceFolder.uri.fsPath, '.git', 'PULL_DETECTED');
-                    if (!fs.existsSync(pullFile)) { fs.writeFileSync(pullFile, ''); }
-                }
-            } catch {
-                // IGNORE ERRORS (NOT A GIT REPO OR OTHER ISSUES)
-            }
-        }
-    };
-
-    // LISTEN TO REPOSITORY STATE CHANGES (DELAY CHECK TO ALLOW PULL TO COMPLETE)
-    const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-    if (gitExtension) {
-        const git = gitExtension.getAPI(1);
-        git.repositories.forEach((repo: any) => {
-            const stateChangeListener = repo.state.onDidChange(() => { setTimeout(checkCommitsAfterPull, 1000); });
-            context.subscriptions.push(stateChangeListener);
-        });
-    }
-
     context.subscriptions.push(insertDontCommitDisposable, softResetDisposable, workspaceWatcher);
 
     let isShowingError = false; // CHECK IF ERROR IS BEING SHOWN
@@ -192,7 +151,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     isShowingError = true;
                     await showNotification(
                         'error' as NotificationType,
-                        "Push blocked: Found commit with 'DONT COMMIT JUST SAVE' message",
+                        "Pull detected: Found commit with 'DONT COMMIT JUST SAVE' message",
                         "Source: DONT COMMIT JUST SAVE"
                     );
 
@@ -202,7 +161,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
             }
         }
-    }, 100);
+    }, 250);
 
     context.subscriptions.push({ dispose: () => clearInterval(interval) });
 }

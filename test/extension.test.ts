@@ -2,6 +2,8 @@ import * as assert from 'node:assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { activate, deactivate } from '../src/extension';
 
 const childProcess = require('node:child_process') as typeof import('node:child_process');
@@ -133,8 +135,8 @@ suite('Extension Tests', () => {
     test('activate should set up interval for monitoring blocked pushes', async () => {
         // ARRANGE - SETUP STUBS
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
-        sandbox.stub(vscode.commands, 'registerCommand');
-        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        sandbox.stub(vscode.commands, 'registerCommand').returns({ dispose: () => { } } as any);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders').returns({ dispose: () => { } } as any);
         sandbox.stub(vscode.extensions, 'getExtension');
 
         // ACT - ACTIVATE EXTENSION
@@ -142,6 +144,40 @@ suite('Extension Tests', () => {
 
         // ASSERT - VERIFY INTERVAL SETUP
         assert.ok(context.subscriptions.length > 0);
+    });
+
+    // TEST FOR PULL DETECTION NOTIFICATION (FILE-BASED SIGNAL)
+    test('activate should show modal when PULL_DETECTED file exists and then clear it', async () => {
+        const clock = sandbox.useFakeTimers();
+
+        // ARRANGE - CREATE TEMP REPO STRUCTURE
+        const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-commit-just-save-'));
+        const gitDir = path.join(tmpRepo, '.git');
+        fs.mkdirSync(path.join(gitDir, 'hooks'), { recursive: true });
+        const pullDetectedFile = path.join(gitDir, 'PULL_DETECTED');
+        fs.writeFileSync(pullDetectedFile, '');
+        const mockFolder: vscode.WorkspaceFolder = { uri: vscode.Uri.file(tmpRepo), name: 'tmp-repo', index: 0 };
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([mockFolder]);
+
+        sandbox.stub(vscode.commands, 'registerCommand').returns({ dispose: () => { } } as any);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders').returns({ dispose: () => { } } as any);
+
+        const showErrorStub = sandbox.stub(vscode.window, 'showErrorMessage').resolves(undefined);
+
+        // ACT
+        await activate(context);
+        await clock.tickAsync(300);
+
+        // ASSERT - MODAL SHOWN WITH PULL MESSAGE AND FILE CLEARED
+        assert.ok(showErrorStub.calledOnce);
+        const callArgs = showErrorStub.getCall(0).args;
+        assert.strictEqual(callArgs[0], "Pull detected: Found commit with 'DONT COMMIT JUST SAVE' message");
+        assert.deepStrictEqual(callArgs[1], { detail: 'Source: DONT COMMIT JUST SAVE', modal: true });
+        assert.ok(!fs.existsSync(pullDetectedFile), 'PULL_DETECTED file should be removed after showing the modal');
+
+        // CLEANUP
+        for (const sub of context.subscriptions) try { (sub as any)?.dispose?.(); } catch { /* IGNORE */ }
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
     });
 
     // TEST FOR INSERT DONT COMMIT COMMAND

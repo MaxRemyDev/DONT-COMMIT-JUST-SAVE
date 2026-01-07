@@ -2,6 +2,13 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
+## [1.3.2] - 2026-01-07
+
+### Fixed
+
+-   Prevent false-positive modal after commits (pull detection now only via `post-merge` git hook)
+-   Correct modal wording for pull detection ("Pull detected" instead of "Push blocked")
+
 ## [1.3.1] - 2026-01-05
 
 ### Added
