@@ -132,7 +132,7 @@ suite('Extension Tests', () => {
     });
 
     // TEST FOR INTERVAL MONITORING SETUP
-    test('activate should set up interval for monitoring blocked pushes', async () => {
+    test('activate should set up git signal watchers for monitoring blocked pushes', async () => {
         // ARRANGE - SETUP STUBS
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.commands, 'registerCommand').returns({ dispose: () => { } } as any);
@@ -148,8 +148,6 @@ suite('Extension Tests', () => {
 
     // TEST FOR PULL DETECTION NOTIFICATION (FILE-BASED SIGNAL)
     test('activate should show modal when PULL_DETECTED file exists and then clear it', async () => {
-        const clock = sandbox.useFakeTimers();
-
         // ARRANGE - CREATE TEMP REPO STRUCTURE
         const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-commit-just-save-'));
         const gitDir = path.join(tmpRepo, '.git');
@@ -166,7 +164,9 @@ suite('Extension Tests', () => {
 
         // ACT
         await activate(context);
-        await clock.tickAsync(300);
+
+        // WAIT FOR MICROTASK-BASED INITIAL SIGNAL CONSUMPTION
+        await new Promise<void>(resolve => setImmediate(resolve));
 
         // ASSERT - MODAL SHOWN WITH PULL MESSAGE AND FILE CLEARED
         assert.ok(showErrorStub.calledOnce);
@@ -214,7 +214,7 @@ suite('Extension Tests', () => {
         sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Reset' } as any);
         sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
 
-        const execSyncStub = sandbox.stub(childProcess, 'execSync').returns(Buffer.from(''));
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns(Buffer.from(''));
 
         // ACT - ACTIVATE AND EXECUTE COMMAND
         await activate(context);
@@ -223,9 +223,10 @@ suite('Extension Tests', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - VERIFY COMMAND EXECUTED
-        assert.ok(execSyncStub.calledOnce);
-        const [cmd, opts] = execSyncStub.getCall(0).args as [string, { cwd?: string; stdio?: any }];
-        assert.strictEqual(cmd, 'git reset --soft HEAD~2');
+        assert.ok(execFileSyncStub.calledOnce);
+        const [file, args, opts] = execFileSyncStub.getCall(0).args as [string, string[], { cwd?: string; stdio?: any }];
+        assert.strictEqual(file, 'git');
+        assert.deepStrictEqual(args, ['reset', '--soft', 'HEAD~2']);
         assert.strictEqual(opts.cwd, '/test/repo');
     });
 
@@ -240,7 +241,7 @@ suite('Extension Tests', () => {
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
         sandbox.stub(vscode.window, 'showInputBox').resolves(undefined);
-        const execSyncStub = sandbox.stub(childProcess, 'execSync').returns(Buffer.from(''));
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns(Buffer.from(''));
 
         // ACT - ACTIVATE AND EXECUTE COMMAND
         await activate(context);
@@ -249,6 +250,6 @@ suite('Extension Tests', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - VERIFY COMMAND NOT EXECUTED
-        assert.ok(execSyncStub.notCalled);
+        assert.ok(execFileSyncStub.notCalled);
     });
 });

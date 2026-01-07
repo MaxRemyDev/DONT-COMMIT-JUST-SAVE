@@ -4,42 +4,83 @@ import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
 import { showNotification } from './utils/notifications';
 import { setupGitHook } from './services/gitHooks';
-import { NotificationType } from './types';
 
+type GitRepository = { rootUri?: vscode.Uri; inputBox?: { value: string }; };
+type GitAPI = { repositories: GitRepository[]; };
+type GitExtensionExports = { getAPI(version: 1): GitAPI; };
+
+const GIT_EXTENSION_ID = 'vscode.git' as const;
+const GIT_API_VERSION = 1 as const;
+const SIGNAL_FILES = { PUSH_BLOCKED: 'PUSH_BLOCKED', PULL_DETECTED: 'PULL_DETECTED' } as const;
+
+// RESOLVE GIT DIRECTORY FROM WORKSPACE ROOT FOR SIGNAL FILES
+function resolveGitDir(workspaceRoot: string): string | undefined {
+    const dotGitPath = path.join(workspaceRoot, '.git');
+    if (!fs.existsSync(dotGitPath)) { return undefined; }
+
+    try {
+        const stat = fs.statSync(dotGitPath);
+        if (stat.isDirectory()) { return dotGitPath; }
+
+        if (stat.isFile()) {
+            const content = fs.readFileSync(dotGitPath, 'utf8');
+            const match = content.match(/^\s*gitdir:\s*(.+)\s*$/m);
+            const gitDir = match?.[1]?.trim();
+            if (!gitDir) { return undefined; }
+            return path.isAbsolute(gitDir) ? gitDir : path.resolve(workspaceRoot, gitDir);
+        }
+    } catch {
+        return undefined;
+    }
+
+    return undefined;
+}
+
+// GET GIT API FROM VSCODE EXTENSION
+function getGitApi(): GitAPI | undefined {
+    const extension = vscode.extensions.getExtension(GIT_EXTENSION_ID);
+    const exports = extension?.exports as GitExtensionExports | undefined;
+
+    try {
+        return exports?.getAPI(GIT_API_VERSION);
+    } catch {
+        return undefined;
+    }
+}
+
+// ACTIVATE EXTENSION
 export async function activate(context: vscode.ExtensionContext) {
     // SETUP HOOKS FOR EXISTING WORKSPACES
     vscode.workspace.workspaceFolders?.forEach(folder => setupGitHook(folder.uri.fsPath));
 
     // REGISTER COMMAND TO INSERT "DONT COMMIT JUST SAVE"
     const insertDontCommitDisposable = vscode.commands.registerCommand('extension.insertDontCommit', () => {
-        const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-        const git = gitExtension.getAPI(1);
+        const git = getGitApi();
+        if (!git) { return; }
 
         if (git.repositories.length > 0) {
             const repo = git.repositories[0];
-            repo.inputBox.value = "DONT COMMIT JUST SAVE";
+            if (repo?.inputBox) { repo.inputBox.value = "DONT COMMIT JUST SAVE"; }
         }
     });
 
     // REGISTER COMMAND TO SOFT RESET HEAD~N
     const softResetDisposable = vscode.commands.registerCommand('extension.softResetHead', async () => {
-        const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-        if (!gitExtension) {
-            await showNotification('error' as NotificationType, 'Git extension not found', 'The built-in vscode.git extension is required.');
+        const git = getGitApi();
+        if (!git) {
+            await showNotification('error', 'Git extension not found', 'The built-in vscode.git extension is required.');
             return;
         }
-
-        const git = gitExtension.getAPI(1);
-        const repositories = git.repositories as any[];
+        const repositories = git.repositories;
 
         // SHOW ERROR NOTIFICATION IF NO GIT REPOSITORY IS FOUND
         if (!repositories || repositories.length === 0) {
-            await showNotification('error' as NotificationType, 'No git repository found', 'Open a folder containing a git repository and try again.');
+            await showNotification('error', 'No git repository found', 'Open a folder containing a git repository and try again.');
             return;
         }
 
         // SHOW QUICK PICK TO SELECT THE REPOSITORY TO RESET
-        const pickRepo = async (): Promise<any | undefined> => {
+        const pickRepo = async (): Promise<GitRepository | undefined> => {
             if (repositories.length === 1) { return repositories[0]; }
 
             const items = repositories.map(repo => {
@@ -103,67 +144,113 @@ export async function activate(context: vscode.ExtensionContext) {
         // RESET HEAD~N COMMITS
         const cmd = `git reset --soft HEAD~${count}`;
         try {
-            childProcess.execSync(cmd, { cwd: repo.rootUri.fsPath, stdio: 'pipe' });
-            await showNotification('info' as NotificationType, 'Soft reset completed', cmd);
+            childProcess.execFileSync('git', ['reset', '--soft', `HEAD~${count}`], { cwd: repo.rootUri.fsPath, stdio: 'pipe' });
+            await showNotification('info', 'Soft reset completed', cmd);
         } catch (error) {
             const e = error as { message?: string; stderr?: Buffer | string };
             const stderr = typeof e?.stderr === 'string' ? e.stderr : e?.stderr?.toString('utf8');
             const details = [e?.message ?? String(error), stderr ? `\n\nSTDERR:\n${stderr}` : undefined].filter(Boolean).join('');
-            await showNotification('error' as NotificationType, 'Soft reset failed', `${cmd}\n\n${details}`);
+            await showNotification('error', 'Soft reset failed', `${cmd}\n\n${details}`);
         }
     });
-
-    // WATCH FOR NEW WORKSPACES
-    const workspaceWatcher = vscode.workspace.onDidChangeWorkspaceFolders(event => {
-        event.added.forEach(folder => setupGitHook(folder.uri.fsPath));
-    });
-
-    context.subscriptions.push(insertDontCommitDisposable, softResetDisposable, workspaceWatcher);
+    context.subscriptions.push(insertDontCommitDisposable, softResetDisposable);
 
     let isShowingError = false; // CHECK IF ERROR IS BEING SHOWN
-
-    // MONITOR FOR BLOCKED PUSHES AND PULL DETECTIONS
-    const interval = setInterval(async () => {
+    const consumeSignalFile = async (gitDir: string, signalFile: string, title: string, detail: string) => {
         if (isShowingError) { return; }
 
-        for (const folder of vscode.workspace.workspaceFolders || []) {
-            // CHECK FOR BLOCKED PUSHES (AFTER GIT PUSH)
-            const blockFile = path.join(folder.uri.fsPath, '.git', 'PUSH_BLOCKED');
-            if (fs.existsSync(blockFile)) {
-                try {
-                    isShowingError = true;
-                    await showNotification(
-                        'error' as NotificationType,
+        const filePath = path.join(gitDir, signalFile);
+        if (!fs.existsSync(filePath)) { return; }
+
+        try {
+            isShowingError = true;
+            await showNotification('error', title, detail);
+        } finally {
+            if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); }
+            isShowingError = false;
+        }
+    };
+
+    const signalWatchers = new Map<string, fs.FSWatcher>();
+    const ensureGitSignalWatcher = (workspaceRoot: string) => {
+        if (signalWatchers.has(workspaceRoot)) { return; }
+
+        const gitDir = resolveGitDir(workspaceRoot);
+        if (!gitDir) { return; }
+
+        const processSignals = async (filenames?: string[]) => {
+            const toCheck = filenames?.length ? filenames : [SIGNAL_FILES.PUSH_BLOCKED, SIGNAL_FILES.PULL_DETECTED];
+            for (const f of toCheck) {
+                if (f === SIGNAL_FILES.PUSH_BLOCKED) {
+                    await consumeSignalFile(
+                        gitDir,
+                        SIGNAL_FILES.PUSH_BLOCKED,
                         "Push blocked: Found commit with 'DONT COMMIT JUST SAVE' message",
                         "Please remove or amend the commit before pushing."
                     );
-
-                    if (fs.existsSync(blockFile)) { fs.unlinkSync(blockFile); }
-                } finally {
-                    isShowingError = false;
                 }
-            }
 
-            // CHECK FOR PULL DETECTIONS (AFTER GIT PULL)
-            const pullFile = path.join(folder.uri.fsPath, '.git', 'PULL_DETECTED');
-            if (fs.existsSync(pullFile)) {
-                try {
-                    isShowingError = true;
-                    await showNotification(
-                        'error' as NotificationType,
+                if (f === SIGNAL_FILES.PULL_DETECTED) {
+                    await consumeSignalFile(
+                        gitDir,
+                        SIGNAL_FILES.PULL_DETECTED,
                         "Pull detected: Found commit with 'DONT COMMIT JUST SAVE' message",
                         "Source: DONT COMMIT JUST SAVE"
                     );
-
-                    if (fs.existsSync(pullFile)) { fs.unlinkSync(pullFile); }
-                } finally {
-                    isShowingError = false;
                 }
             }
-        }
-    }, 250);
+        };
 
-    context.subscriptions.push({ dispose: () => clearInterval(interval) });
+        // PROCESS LEFTOVER SIGNAL FILES WITHOUT BLOCKING ACTIVATION
+        queueMicrotask(() => { void processSignals().catch(() => { /* IGNORE */ }); });
+
+        try {
+            const watcher = fs.watch(gitDir, (...args) => {
+                const filename = args[1];
+                void (async () => {
+                    const raw = filename ? filename.toString() : '';
+                    if (!raw) {
+                        await processSignals();
+                        return;
+                    }
+
+                    if (raw !== SIGNAL_FILES.PUSH_BLOCKED && raw !== SIGNAL_FILES.PULL_DETECTED) { return; }
+                    await processSignals([raw]);
+                })().catch(() => { /* IGNORE */ });
+            });
+
+            signalWatchers.set(workspaceRoot, watcher);
+        } catch {
+            // IGNORE WATCHER FAILURES (E.G. GIT DIR NOT WATCHABLE)
+        }
+    };
+
+    // WATCH SIGNAL FILES FOR CURRENT WORKSPACES
+    vscode.workspace.workspaceFolders?.forEach(folder => ensureGitSignalWatcher(folder.uri.fsPath));
+
+    // WATCH FOR NEW/REMOVED WORKSPACES
+    const workspaceWatcher = vscode.workspace.onDidChangeWorkspaceFolders(event => {
+        event.added.forEach(folder => {
+            setupGitHook(folder.uri.fsPath);
+            ensureGitSignalWatcher(folder.uri.fsPath);
+        });
+
+        event.removed.forEach(folder => {
+            const root = folder.uri.fsPath;
+            const watcher = signalWatchers.get(root);
+            if (watcher) { watcher.close(); }
+            signalWatchers.delete(root);
+        });
+    });
+    context.subscriptions.push(workspaceWatcher);
+
+    // ENSURE ALL WATCHERS ARE CLOSED ON DEACTIVATE
+    context.subscriptions.push({
+        dispose: () => {
+            for (const watcher of signalWatchers.values()) { watcher.close(); }
+            signalWatchers.clear();
+        }
+    });
 }
 
 export function deactivate() {
