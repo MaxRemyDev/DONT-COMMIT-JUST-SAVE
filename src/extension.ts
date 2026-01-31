@@ -85,14 +85,14 @@ export async function activate(context: vscode.ExtensionContext) {
     const softResetDisposable = vscode.commands.registerCommand('extension.softResetHead', async () => {
         const git = getGitApi();
         if (!git) {
-            await showNotification('error', 'Git extension not found', 'The built-in vscode.git extension is required.');
+            await showNotification('error', 'Git not available', 'Open a folder that uses Git.');
             return;
         }
         const repositories = git.repositories;
 
         // SHOW ERROR NOTIFICATION IF NO GIT REPOSITORY IS FOUND
         if (!repositories || repositories.length === 0) {
-            await showNotification('error', 'No git repository found', 'Open a folder containing a git repository and try again.');
+            await showNotification('error', 'No Git repo', 'Open a folder that is a Git repo.');
             return;
         }
 
@@ -107,8 +107,8 @@ export async function activate(context: vscode.ExtensionContext) {
             });
 
             const selected = await vscode.window.showQuickPick(items, {
-                title: 'Select repository',
-                placeHolder: 'Select the git repository to soft reset'
+                title: 'Pick repo',
+                placeHolder: 'Which repo to reset?'
             });
 
             return selected?.repo;
@@ -120,21 +120,17 @@ export async function activate(context: vscode.ExtensionContext) {
         const consecutiveCount = getConsecutiveDontCommitCount(repo.rootUri.fsPath);
         let count: number;
 
+        const resetConfirmDetail = [
+            'Removes from history, keeps changes staged.',
+            '',
+            '⚠ Force push needed if already pushed.'
+        ].join('\n');
+
         if (consecutiveCount > 0) {
             // SUGGEST RESETTING ALL CONSECUTIVE "DONT COMMIT JUST SAVE" COMMITS
             const confirm = await vscode.window.showWarningMessage(
-                `You have ${consecutiveCount} consecutive 'DONT COMMIT JUST SAVE' commit${consecutiveCount > 1 ? 's' : ''}. Reset all?`,
-                {
-                    modal: true,
-                    detail: [
-                        `This will run: git reset --soft HEAD~${consecutiveCount}`,
-                        '',
-                        `- Removes the last ${consecutiveCount} commit${consecutiveCount > 1 ? 's' : ''} from history (git log).`,
-                        '- Changes stay staged.',
-                        '',
-                        'If pushed, you may need to force push.'
-                    ].join('\n')
-                },
+                `Reset last ${consecutiveCount} 'DONT COMMIT JUST SAVE' commit${consecutiveCount > 1 ? 's' : ''} ?`,
+                { modal: true, detail: resetConfirmDetail },
                 { title: `Reset ${consecutiveCount}` },
                 { title: 'Cancel', isCloseAffordance: true }
             );
@@ -145,13 +141,13 @@ export async function activate(context: vscode.ExtensionContext) {
             // NO CONSECUTIVE RUN FROM HEAD: SHOW MANUAL INPUT
             const rawCount = await vscode.window.showInputBox({
                 title: 'Git soft reset',
-                prompt: 'How many commits do you want to soft reset? (HEAD~N)',
+                prompt: 'How many commits ?',
                 placeHolder: '',
                 validateInput: (value: string) => {
                     const trimmed = value.trim();
-                    if (trimmed.length === 0) { return 'Required'; }
+                    if (trimmed.length === 0) { return 'Enter a number'; }
                     const n = Number(trimmed);
-                    if (!Number.isInteger(n) || n < 1) { return 'Enter a positive integer (>= 1)'; }
+                    if (!Number.isInteger(n) || n < 1) { return 'Use 1 or more'; }
                     return undefined;
                 }
             });
@@ -161,18 +157,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
             // SHOW CONFIRMATION DIALOG
             const confirm = await vscode.window.showWarningMessage(
-                `Soft reset last ${count} commit${count > 1 ? 's' : ''}?`,
-                {
-                    modal: true,
-                    detail: [
-                        `This will run: git reset --soft HEAD~${count}`,
-                        '',
-                        `- Removes the last ${count} commit${count > 1 ? 's' : ''} from history (git log).`,
-                        '- Changes stay staged.',
-                        '',
-                        'If pushed, you may need to force push.'
-                    ].join('\n')
-                },
+                `Reset last ${count} commit${count > 1 ? 's' : ''} ?`,
+                { modal: true, detail: resetConfirmDetail },
                 { title: 'Reset' },
                 { title: 'Cancel', isCloseAffordance: true }
             );
@@ -184,12 +170,12 @@ export async function activate(context: vscode.ExtensionContext) {
         const cmd = `git reset --soft HEAD~${count}`;
         try {
             childProcess.execFileSync('git', ['reset', '--soft', `HEAD~${count}`], { cwd: repo.rootUri.fsPath, stdio: 'pipe' });
-            await showNotification('info', 'Soft reset completed', cmd);
+            await showNotification('info', 'Reset done.', cmd);
         } catch (error) {
             const e = error as { message?: string; stderr?: Buffer | string };
             const stderr = typeof e?.stderr === 'string' ? e.stderr : e?.stderr?.toString('utf8');
             const details = [e?.message ?? String(error), stderr ? `\n\nSTDERR:\n${stderr}` : undefined].filter(Boolean).join('');
-            await showNotification('error', 'Soft reset failed', `${cmd}\n\n${details}`);
+            await showNotification('error', 'Reset failed', `${cmd}\n\n${details}`);
         }
     });
     context.subscriptions.push(insertDontCommitDisposable, softResetDisposable);
@@ -222,19 +208,25 @@ export async function activate(context: vscode.ExtensionContext) {
             for (const f of toCheck) {
                 if (f === SIGNAL_FILES.PUSH_BLOCKED) {
                     await consumeSignalFile(
-                        gitDir,
-                        SIGNAL_FILES.PUSH_BLOCKED,
-                        "Push blocked: Found commit with 'DONT COMMIT JUST SAVE' message",
-                        "Please remove or amend the commit before pushing."
+                        gitDir, SIGNAL_FILES.PUSH_BLOCKED,
+                        'PUSH BLOCKED',
+                        [
+                            'A "DONT COMMIT JUST SAVE" commit exists.',
+                            '',
+                            '⚠ Remove or amend it first.'
+                        ].join('\n')
                     );
                 }
 
                 if (f === SIGNAL_FILES.PULL_DETECTED) {
                     await consumeSignalFile(
-                        gitDir,
-                        SIGNAL_FILES.PULL_DETECTED,
-                        "Pull detected: Found commit with 'DONT COMMIT JUST SAVE' message",
-                        "Source: DONT COMMIT JUST SAVE"
+                        gitDir, SIGNAL_FILES.PULL_DETECTED,
+                        'HEADS UP',
+                        [
+                            'This repo has a "DONT COMMIT JUST SAVE" commit (example: from a pull).',
+                            '',
+                            '⚠ Remove or amend it first.'
+                        ].join('\n')
                     );
                 }
             }
@@ -256,7 +248,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             signalWatchers.set(workspaceRoot, watcher);
         } catch {
-            // IGNORE WATCHER FAILURES (E.G. GIT DIR NOT WATCHABLE)
+            // IGNORE WATCHER FAILURES (EXAMPLE: GIT DIR NOT WATCHABLE)
         }
     };
 

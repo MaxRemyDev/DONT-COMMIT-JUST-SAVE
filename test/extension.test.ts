@@ -171,8 +171,11 @@ suite('Extension Tests', () => {
         // ASSERT - MODAL SHOWN WITH PULL MESSAGE AND FILE CLEARED
         assert.ok(showErrorStub.calledOnce);
         const callArgs = showErrorStub.getCall(0).args;
-        assert.strictEqual(callArgs[0], "Pull detected: Found commit with 'DONT COMMIT JUST SAVE' message");
-        assert.deepStrictEqual(callArgs[1], { detail: 'Source: DONT COMMIT JUST SAVE', modal: true });
+        assert.strictEqual(callArgs[0], 'HEADS UP');
+        assert.deepStrictEqual(callArgs[1], {
+            detail: 'This repo has a "DONT COMMIT JUST SAVE" commit (example: from a pull).\n\n⚠ Remove or amend it first.',
+            modal: true
+        });
         assert.ok(!fs.existsSync(pullDetectedFile), 'PULL_DETECTED file should be removed after showing the modal');
 
         // CLEANUP
@@ -354,7 +357,7 @@ suite('Extension Tests', () => {
 
         // ASSERT - ERROR SHOWN
         assert.ok(showNotificationStub.calledOnce);
-        assert.ok(showNotificationStub.getCall(0).args[0].includes('Git extension not found'));
+        assert.ok(showNotificationStub.getCall(0).args[0].includes('Git not available'));
     });
 
     // TEST FOR SOFT RESET HEAD WHEN NO REPOSITORY
@@ -376,7 +379,7 @@ suite('Extension Tests', () => {
 
         // ASSERT - ERROR SHOWN
         assert.ok(showNotificationStub.calledOnce);
-        assert.ok(showNotificationStub.getCall(0).args[0].includes('No git repository'));
+        assert.ok(showNotificationStub.getCall(0).args[0].includes('No Git repo'));
     });
 
     // TEST FOR GET CONSECUTIVE COUNT WHEN GIT LOG THROWS (FALLBACK TO 0)
@@ -435,7 +438,7 @@ suite('Extension Tests', () => {
         // ASSERT - ERROR SHOWN
         assert.strictEqual(execFileSyncStub.callCount, 2);
         assert.ok(showErrorStub.calledOnce);
-        assert.ok(showErrorStub.getCall(0).args[0].includes('Soft reset failed'));
+        assert.ok(showErrorStub.getCall(0).args[0].includes('Reset failed'));
     });
 
     // TEST FOR MULTIPLE REPOS: USER SELECTS REPO

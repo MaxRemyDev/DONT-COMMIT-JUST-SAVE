@@ -133,7 +133,7 @@ function buildPostMergeBlock(): string {
 // SETUP GIT HOOKS FOR PRE-PUSH AND POST-MERGE
 export const setupGitHook = (workspaceRoot: string): void => {
     if (!workspaceRoot || workspaceRoot.trim().length === 0) {
-        void vscode.window.showErrorMessage('Failed to setup git hook: invalid workspace root path');
+        void vscode.window.showErrorMessage('Hook setup failed: invalid folder path');
         return;
     }
 
@@ -153,6 +153,6 @@ export const setupGitHook = (workspaceRoot: string): void => {
         upsertHookBlock(postMergeHookPath, buildPostMergeBlock());
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        void vscode.window.showErrorMessage(`Failed to setup git hook: ${message}`);
+        void vscode.window.showErrorMessage(`Hook setup failed: ${message}`);
     }
 }; 
