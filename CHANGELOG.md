@@ -2,6 +2,12 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
+## [1.3.3] - 2026-01-31
+
+### Added
+
+-   Soft reset now suggests "Reset N" in one click for consecutive "DONT COMMIT JUST SAVE" commits; manual input still used otherwise
+
 ## [1.3.2] - 2026-01-07
 
 ### Fixed
