@@ -1,32 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { resolveGitDir } from '../utils/git';
 
 const MARKER_START = '# DONT-COMMIT-JUST-SAVE BEGIN';
 const MARKER_END = '# DONT-COMMIT-JUST-SAVE END';
-
-// RESOLVE GIT DIRECTORY FROM WORKSPACE ROOT
-function resolveGitDir(workspaceRoot: string): string | undefined {
-    const dotGitPath = path.join(workspaceRoot, '.git');
-    if (!fs.existsSync(dotGitPath)) { return undefined; }
-
-    try {
-        const stat = fs.statSync(dotGitPath);
-        if (stat.isDirectory()) { return dotGitPath; }
-
-        if (stat.isFile()) {
-            const content = fs.readFileSync(dotGitPath, 'utf8');
-            const match = content.match(/^\s*gitdir:\s*(.+)\s*$/m);
-            const gitDir = match?.[1]?.trim();
-            if (!gitDir) { return undefined; }
-            return path.isAbsolute(gitDir) ? gitDir : path.resolve(workspaceRoot, gitDir);
-        }
-    } catch {
-        return undefined;
-    }
-
-    return undefined;
-}
 
 // ESCAPE REGULAR EXPRESSION FOR USE IN REPLACE OPERATIONS
 function escapeRegExp(value: string): string {
