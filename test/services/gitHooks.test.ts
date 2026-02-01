@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import { setupGitHook } from '../../src/services/gitHooks';
+import { setupGitHook, __test as gitHooksTest } from '../../src/services/gitHooks';
 
 suite('Git Hooks Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -112,5 +112,73 @@ suite('Git Hooks Tests', () => {
         assert.ok(content.includes('ORIG_HEAD'), 'post-merge hook should check ORIG_HEAD');
         assert.ok(content.includes('git log ORIG_HEAD..HEAD'), 'post-merge hook should check commits between ORIG_HEAD and HEAD');
         assert.ok(content.includes('git log -5'), 'post-merge hook should have fallback to check last 5 commits');
+    });
+
+    // TEST FOR EXISTING HOOK BLOCK UPDATE
+    test('setupGitHook should update existing hook block and normalize shebang', async () => {
+        // ARRANGE - CREATE EXISTING HOOK WITH MARKERS AND CRLF
+        const prePushHookPath = path.join(testHooksDir, 'pre-push');
+        const markerStart = '# DONT-COMMIT-JUST-SAVE BEGIN';
+        const markerEnd = '# DONT-COMMIT-JUST-SAVE END';
+        const existing = ['echo "custom"', markerStart, 'OLD_BLOCK', markerEnd].join('\r\n');
+        fs.writeFileSync(prePushHookPath, existing, 'utf8');
+
+        // ACT - SETUP GIT HOOK
+        await setupGitHook(testWorkspaceRoot);
+
+        // ASSERT - VERIFY BLOCK UPDATED AND SHEBANG ADDED
+        const content = fs.readFileSync(prePushHookPath, 'utf8');
+        assert.ok(content.startsWith('#!/bin/sh'), 'hook should start with shebang');
+        assert.ok(content.includes('dont_commit_just_save_check_push'), 'hook block should be updated');
+        assert.ok(!content.includes('OLD_BLOCK'), 'old hook block should be replaced');
+        assert.ok(content.includes('\r\n'), 'CRLF newlines should be preserved');
+    });
+
+    // TEST FOR INSERT WHEN NO NEWLINE EXISTS
+    test('setupGitHook should insert block when hook file has no newline', async () => {
+        // ARRANGE - EXISTING FILE WITHOUT NEWLINES
+        const prePushHookPath = path.join(testHooksDir, 'pre-push');
+        fs.writeFileSync(prePushHookPath, '#!/bin/sh', 'utf8');
+
+        // ACT - SETUP GIT HOOK
+        await setupGitHook(testWorkspaceRoot);
+
+        // ASSERT - VERIFY BLOCK INSERTED
+        const content = fs.readFileSync(prePushHookPath, 'utf8');
+        assert.ok(content.includes('dont_commit_just_save_check_push'));
+    });
+
+    // TEST FOR MISSING GIT DIR
+    test('setupGitHook should return when .git directory is missing', async () => {
+        // ARRANGE - CREATE NON-GIT WORKSPACE
+        const noGitRoot = fs.mkdtempSync(path.join(testWorkspaceRoot, 'nogit-'));
+
+        // ACT - SETUP GIT HOOK
+        await setupGitHook(noGitRoot);
+
+        // ASSERT - VERIFY NO HOOKS CREATED
+        const hooksDir = path.join(noGitRoot, '.git', 'hooks');
+        assert.ok(!fs.existsSync(hooksDir));
+    });
+
+    // TEST FOR HOOK SETUP FAILURE
+    test('setupGitHook should surface errors when hook setup fails', async () => {
+        // ARRANGE - FORCE MKDIR FAILURE
+        const showErrorStub = sandbox.stub(vscode.window, 'showErrorMessage');
+        const hooksDir = path.join(testGitDir, 'hooks');
+        if (fs.existsSync(hooksDir)) { fs.rmSync(hooksDir, { recursive: true, force: true }); }
+        fs.writeFileSync(hooksDir, 'not a directory');
+
+        // ACT - SETUP GIT HOOK
+        await setupGitHook(testWorkspaceRoot);
+
+        // ASSERT - ERROR MESSAGE SHOWN
+        assert.ok(showErrorStub.calledOnce);
+        assert.ok(showErrorStub.getCall(0).args[0].includes('Hook setup failed'));
+    });
+
+    test('formatHookError should handle non-Error values', () => {
+        assert.strictEqual(gitHooksTest.formatHookError(new Error('fail')), 'fail');
+        assert.strictEqual(gitHooksTest.formatHookError('boom'), 'boom');
     });
 });

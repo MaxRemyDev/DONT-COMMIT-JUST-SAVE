@@ -9,8 +9,6 @@ import { GIT_EXTENSION_ID, GIT_API_VERSION, DONT_COMMIT_MESSAGE } from '../const
 // SUPPORTS WORKTREE: .git FILE WITH gitdir: PATH
 export function resolveGitDir(workspaceRoot: string): string | undefined {
     const dotGitPath = path.join(workspaceRoot, '.git');
-    if (!fs.existsSync(dotGitPath)) { return undefined; }
-
     try {
         const stat = fs.statSync(dotGitPath);
         if (stat.isDirectory()) { return dotGitPath; }

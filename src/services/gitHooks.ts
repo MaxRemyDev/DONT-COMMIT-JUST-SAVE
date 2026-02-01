@@ -6,6 +6,12 @@ import { resolveGitDir } from '../utils/git';
 const MARKER_START = '# DONT-COMMIT-JUST-SAVE BEGIN';
 const MARKER_END = '# DONT-COMMIT-JUST-SAVE END';
 
+function formatHookError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+export const __test = { formatHookError };
+
 // ESCAPE REGULAR EXPRESSION FOR USE IN REPLACE OPERATIONS
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -130,7 +136,7 @@ export const setupGitHook = (workspaceRoot: string): void => {
         const postMergeHookPath = path.join(hooksDir, 'post-merge');
         upsertHookBlock(postMergeHookPath, buildPostMergeBlock());
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatHookError(error);
         void vscode.window.showErrorMessage(`Hook setup failed: ${message}`);
     }
 }; 

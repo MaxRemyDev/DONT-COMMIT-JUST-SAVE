@@ -8,6 +8,12 @@ import { setupGitHook } from '../services/gitHooks';
 
 let isShowingError = false;
 const signalWatchers = new Map<string, fs.FSWatcher>();
+let watchFn: typeof fs.watch = fs.watch;
+
+export const __test = {
+    setWatchFn: (fn: typeof fs.watch): void => { watchFn = fn; },
+    resetWatchFn: (): void => { watchFn = fs.watch; }
+};
 
 // CHECKS FOR SIGNAL FILE, SHOWS ERROR MODAL IF PRESENT, THEN REMOVES FILE
 async function consumeSignalFile(gitDir: string, signalFile: string, title: string, detail: string): Promise<void> {
@@ -65,7 +71,7 @@ function ensureGitSignalWatcher(workspaceRoot: string): void {
     queueMicrotask(() => { void processSignals().catch(() => { /* IGNORE */ }); });
 
     try {
-        const watcher = fs.watch(gitDir, (...args) => {
+        const watcher = watchFn(gitDir, (...args) => {
             const filename = args[1];
             void (async () => {
                 const raw = filename ? filename.toString() : '';

@@ -1,7 +1,9 @@
 import * as assert from 'node:assert';
+import * as fs from 'node:fs';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { showNotification } from '../../src/utils/notifications';
+import { LOG_FILE } from '../../src/utils/logging';
 
 suite('Notifications Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -98,5 +100,25 @@ suite('Notifications Tests', () => {
         assert.ok(infoStub.called);
         assert.ok(warningStub.called);
         assert.ok(errorStub.called);
+    });
+
+    // TEST FOR DETAILS FALLBACK CONTENT
+    test('showNotification should use fallback log content when file is missing', async () => {
+        // ARRANGE - REMOVE LOG FILE BEFORE DETAILS
+        const showInfoStub = sandbox.stub(vscode.window, 'showInformationMessage').callsFake(async () => {
+            if (fs.existsSync(LOG_FILE)) { fs.unlinkSync(LOG_FILE); }
+            return { title: 'Show Details' } as vscode.MessageItem;
+        });
+        const openDocStub = sandbox.stub(vscode.workspace, 'openTextDocument').resolves({} as vscode.TextDocument);
+        sandbox.stub(vscode.window, 'showTextDocument').resolves();
+
+        // ACT - SHOW NOTIFICATION WITH DETAILS BUTTON
+        await showNotification('info', 'Test message', 'Test details', true);
+
+        // ASSERT - FALLBACK CONTENT USED
+        assert.ok(showInfoStub.calledOnce);
+        assert.ok(openDocStub.calledOnce);
+        const content = (openDocStub.getCall(0).args[0] as { content: string }).content;
+        assert.ok(content.includes('No log file found'));
     });
 });

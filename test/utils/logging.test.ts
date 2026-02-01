@@ -2,16 +2,20 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as sinon from 'sinon';
 import { logToFile, LOG_FILE, LogEntry } from '../../src/utils/logging';
 
 suite('Logging Tests', () => {
+    let sandbox: sinon.SinonSandbox;
     let testLogFile: string;
 
     setup(() => {
+        sandbox = sinon.createSandbox();
         testLogFile = path.join(os.tmpdir(), 'test-dont-commit-just-save.md');
     });
 
     teardown(() => {
+        sandbox.restore();
         if (fs.existsSync(testLogFile)) { fs.unlinkSync(testLogFile); }
     });
 
@@ -117,5 +121,30 @@ suite('Logging Tests', () => {
             const content = fs.readFileSync(LOG_FILE, 'utf8');
             assert.ok(content.includes('# DONT COMMIT JUST SAVE - Operation Log'));
         }
+    });
+
+    // TEST FOR APPEND FAILURES
+    test('logToFile should handle append failures gracefully', async () => {
+        // ARRANGE - FORCE APPEND ERROR
+        if (fs.existsSync(LOG_FILE)) { fs.rmSync(LOG_FILE, { recursive: true, force: true }); }
+        fs.mkdirSync(LOG_FILE, { recursive: true });
+        const originalError = console.error;
+        console.error = () => { };
+        const entry: LogEntry = {
+            timestamp: '2024-01-01 12:00:00',
+            type: 'success',
+            message: 'Test append failure'
+        };
+
+        // ACT - LOG TO FILE
+        try {
+            await logToFile(entry);
+        } finally {
+            console.error = originalError;
+            if (fs.existsSync(LOG_FILE)) { fs.rmSync(LOG_FILE, { recursive: true, force: true }); }
+        }
+
+        // ASSERT - DIRECTORY STILL EXISTS
+        assert.ok(!fs.existsSync(LOG_FILE));
     });
 });

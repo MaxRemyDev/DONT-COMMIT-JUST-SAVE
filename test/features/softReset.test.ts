@@ -155,6 +155,42 @@ suite('softReset Feature', () => {
         assert.strictEqual(execFileSyncStub.callCount, 1);
     });
 
+    // TESTS FOR MANUAL INPUT VALIDATION
+    test('softResetHead command should validate manual input values', async () => {
+        // ARRANGE - 0 DCJS, CAPTURE VALIDATOR
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        let validateInput: vscode.InputBoxOptions['validateInput'];
+        sandbox.stub(vscode.window, 'showInputBox').callsFake(async options => {
+            validateInput = options?.validateInput;
+            return '2';
+        });
+        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Cancel' } as any);
+
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns('fix: msg\n');
+
+        // ACT - ACTIVATE + SOFT RESET
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall);
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - VALIDATION RULES
+        assert.strictEqual(execFileSyncStub.callCount, 1);
+        assert.ok(validateInput, 'validateInput should be provided');
+        const runValidate = validateInput as (value: string) => string | undefined;
+        assert.strictEqual(runValidate(''), 'Enter a number');
+        assert.strictEqual(runValidate('   '), 'Enter a number');
+        assert.strictEqual(runValidate('0'), 'Use 1 or more');
+        assert.strictEqual(runValidate('1.2'), 'Use 1 or more');
+        assert.strictEqual(runValidate('2'), undefined);
+    });
+
     // TESTS FOR SOFT RESET HEAD COMMAND WHEN GIT EXTENSION NOT FOUND
     test('softResetHead command should show error when Git extension not found', async () => {
         // ARRANGE - NO GIT
