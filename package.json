@@ -63,7 +63,7 @@
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run compile:test && npm run lint",
         "lint": "eslint src",
-        "test": "vscode-test --config ./test/.vscode-test.mjs"
+        "test": "vscode-test --config ./test/.vscode-test.mjs --coverage --coverage-reporter text-summary --coverage-reporter text"
     },
     "devDependencies": {
         "@types/mocha": "^10.0.10",
