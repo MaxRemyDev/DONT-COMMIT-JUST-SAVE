@@ -1,50 +1,34 @@
-# Local Testing - VS Code Extension
+# Local Testing
 
-Quick guide to test the **DONT COMMIT JUST SAVE** extension locally.
-
-## Quick Test (F5)
+## Quick run (F5)
 
 ```bash
-npm install
-npm run compile
-code .  # Open in VS Code
-# Then press F5
+npm install && npm run compile
+code .
+# F5 → new window; test in a git repo
 ```
 
-A new VS Code window opens. Test in a Git project:
+- **Commands:** Palette → "Insert DONT COMMIT JUST SAVE"
+- **UI:** Source Control bar (💾 + Soft Reset)
 
-- **Command Palette** : "Insert DONT COMMIT JUST SAVE"
-- **SCM Bar** : Buttons in Source Control
-
-## Local Installation
+## Install as .vsix
 
 ```bash
 npm install -g vsce
 vsce package
-code --install-extension dont-commit-just-save-x.x.x.vsix
+code --install-extension dont-commit-just-save-*.vsix
 ```
 
-## Watch Mode
+## Watch + tests
 
 ```bash
-npm run watch  # Auto recompilation
-# Then F5 for debug
-```
-
-## Unit Test
-
-```bash
-npm test # test with vscode-test
+npm run watch   # then F5
+npm test        # vscode-test
 ```
 
 ## Debug
 
-- **Logs** : Palette → "Developer: Show Logs" → "Extension Host"
-- **Breakpoints** : In TypeScript code
-- **Restart** : F5 after modification
+- **Logs:** Palette → "Developer: Show Logs" → Extension Host
+- **Breakpoints:** in `.ts`; restart with F5
 
-## Issues
-
-- **Extension not loading** : Check `out/extension.js`
-- **Missing commands** : Check `.git` folder
-- **Errors** : `npm run lint` + `npm run compile`
+**Troubleshooting:** no `out/extension.js` → `npm run compile`; commands missing → ensure `.git`; run `npm run lint` and fix.
