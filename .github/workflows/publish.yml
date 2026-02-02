@@ -10,9 +10,13 @@ on:
 jobs:
     publish:
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -47,3 +51,69 @@ jobs:
             - name: Publish to Open VSX Registry
               run: ovsx publish -p ${{ secrets.OVSX_PAT }}
               continue-on-error: true
+
+            - name: Package extension
+              run: |
+                  VSIX_FILE="dont-commit-just-save-${{ github.event.inputs.version }}.vsix"
+                  vsce package -o "$VSIX_FILE"
+                  echo "VSIX_FILE=$VSIX_FILE" >> $GITHUB_ENV
+
+            - name: Prepare release metadata
+              run: |
+                  VERSION="${{ github.event.inputs.version }}"
+
+                  if echo "$VERSION" | grep -Eiq '(alpha|beta|rc|b[0-9]|dev)'; then
+                      PRERELEASE=true
+                      RELEASE_LABEL="Pre-Release"
+                  else
+                      PRERELEASE=false
+                      RELEASE_LABEL="Release"
+                  fi
+
+                  echo "PRERELEASE=$PRERELEASE" >> $GITHUB_ENV
+                  echo "RELEASE_LABEL=$RELEASE_LABEL" >> $GITHUB_ENV
+
+                  CURRENT_TAG="v$VERSION"
+                  PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -A 1 "^$CURRENT_TAG$" | tail -n 1 || true)
+                  if [ -z "$PREVIOUS_TAG" ]; then
+                      PREVIOUS_TAG=$(git tag --sort=-v:refname | head -n 1 || true)
+                  fi
+                  echo "PREVIOUS_TAG=$PREVIOUS_TAG" >> $GITHUB_ENV
+
+                  if [ "$PRERELEASE" = "true" ] && [ -n "$PREVIOUS_TAG" ]; then
+                      COMMIT_MESSAGES=$(git log --pretty=format:"%s" "$PREVIOUS_TAG"..HEAD | \
+                        grep -iv "README.md\\|TODO.md\\|CHANGELOG.md\\|LICENSE\\|.gitignore\\|.*[(]workflow[)].*" || true)
+                      echo "COMMIT_MESSAGES<<EOF" >> $GITHUB_ENV
+                      echo "$COMMIT_MESSAGES" >> $GITHUB_ENV
+                      echo "EOF" >> $GITHUB_ENV
+                  fi
+
+                  RELEASE_NOTES=$(awk -v ver="$VERSION" '
+                    BEGIN { found=0; buffer="" }
+                    $0 ~ "^## \\[" ver "\\]" { found=1; next }
+                    found && /^## / { exit }
+                    found { buffer = buffer $0 "\n" }
+                    END { print buffer }
+                  ' CHANGELOG.md)
+
+                  if [ -z "$RELEASE_NOTES" ]; then
+                      RELEASE_NOTES="No release notes found for version $VERSION."
+                  fi
+
+                  echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+                  echo "$RELEASE_NOTES" >> $GITHUB_ENV
+                  echo "EOF" >> $GITHUB_ENV
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: ${{ env.VSIX_FILE }}
+                  tag_name: v${{ github.event.inputs.version }}
+                  name: ${{ env.RELEASE_LABEL }} v${{ github.event.inputs.version }}
+                  body: |
+                      ${{ env.RELEASE_NOTES }}
+                      ${{ env.PRERELEASE == 'true' && env.PREVIOUS_TAG != '' && format('## Commits since {0}:', env.PREVIOUS_TAG) || '' }}
+                      ${{ env.PRERELEASE == 'true' && env.COMMIT_MESSAGES != '' && env.COMMIT_MESSAGES || '' }}
+                  draft: false
+                  prerelease: ${{ env.PRERELEASE == 'true' }}
+                  generate_release_notes: false
