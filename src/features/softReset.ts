@@ -1,8 +1,6 @@
 import * as vscode from 'vscode';
-import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
-import type { GitRepository } from '../types';
-import { getGitApi, getConsecutiveDontCommitCount } from '../utils/git';
+import { getGitApi, getConsecutiveDontCommitCount, hasGitHead, pickRepository } from '../utils/git';
 import { showNotification } from '../utils/notifications';
 
 const resetConfirmDetail = [
@@ -14,7 +12,7 @@ const resetConfirmDetail = [
 // REGISTERS COMMAND TO SOFT RESET LAST N COMMITS IN PICKED REPO (KEEPS CHANGES STAGED)
 export function registerSoftReset(context: vscode.ExtensionContext): void {
     const disposable = vscode.commands.registerCommand('extension.softResetHead', async () => {
-        const git = getGitApi();
+        const git = await getGitApi();
         if (!git) {
             await showNotification('error', 'Git not available', 'Open a folder that uses Git.');
             return;
@@ -26,25 +24,14 @@ export function registerSoftReset(context: vscode.ExtensionContext): void {
             return;
         }
 
-        const pickRepo = async (): Promise<GitRepository | undefined> => {
-            if (repositories.length === 1) { return repositories[0]; }
+        const repo = await pickRepository(repositories, {
+            title: 'Pick repo',
+            placeHolder: 'Which repo to reset?',
+            preferActive: false
+        });
 
-            const items = repositories.map(repo => {
-                const repoPath = repo?.rootUri?.fsPath as string | undefined;
-                const label = repoPath ? path.basename(repoPath) : 'Repository';
-                return { label, description: repoPath ?? '', repo };
-            });
-
-            const selected = await vscode.window.showQuickPick(items, {
-                title: 'Pick repo',
-                placeHolder: 'Which repo to reset?'
-            });
-
-            return selected?.repo;
-        };
-
-        const repo = await pickRepo();
         if (!repo?.rootUri?.fsPath) { return; }
+        if (!hasGitHead(repo.rootUri.fsPath)) { await showNotification('error', 'No commits to reset', 'This repo has no commits yet.'); return; }
 
         const consecutiveCount = getConsecutiveDontCommitCount(repo.rootUri.fsPath);
         let count: number;

@@ -22,7 +22,7 @@ suite('insertDontCommit Feature', () => {
         const mockRepo = { inputBox: { value: '' }, state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');

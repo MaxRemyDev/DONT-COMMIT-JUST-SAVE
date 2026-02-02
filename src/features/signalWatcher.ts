@@ -1,26 +1,32 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { resolveGitDir } from '../utils/git';
+import { hasRecentDontCommitMarker, resolveGitDir } from '../utils/git';
 import { showNotification } from '../utils/notifications';
 import { SIGNAL_FILES } from '../constants';
 import { setupGitHook } from '../services/gitHooks';
 
 let isShowingError = false;
-const signalWatchers = new Map<string, fs.FSWatcher>();
+const signalWatchers = new Map<string, { watcher?: fs.FSWatcher; poller?: NodeJS.Timeout; roots: Set<string> }>();
+const workspaceToGitDir = new Map<string, string>();
+type PendingSignal = { gitDir: string; signalFile: string; title: string; detail: string };
+const pendingSignals: Array<PendingSignal | undefined> = [];
+const warnedRepos = new Set<string>();
 let watchFn: typeof fs.watch = fs.watch;
 
 export const __test = {
     setWatchFn: (fn: typeof fs.watch): void => { watchFn = fn; },
-    resetWatchFn: (): void => { watchFn = fs.watch; }
+    resetWatchFn: (): void => { watchFn = fs.watch; },
+    enqueuePendingSignal: (signal?: PendingSignal): void => { pendingSignals.push(signal); },
+    addWarnedRepo: (gitDir: string): void => { warnedRepos.add(gitDir); },
+    clearWarnedRepos: (): void => { warnedRepos.clear(); }
 };
 
 // CHECKS FOR SIGNAL FILE, SHOWS ERROR MODAL IF PRESENT, THEN REMOVES FILE
 async function consumeSignalFile(gitDir: string, signalFile: string, title: string, detail: string): Promise<void> {
-    if (isShowingError) { return; }
-
     const filePath = path.join(gitDir, signalFile);
     if (!fs.existsSync(filePath)) { return; }
+    if (isShowingError) { pendingSignals.push({ gitDir, signalFile, title, detail }); return; }
 
     try {
         isShowingError = true;
@@ -29,15 +35,23 @@ async function consumeSignalFile(gitDir: string, signalFile: string, title: stri
         if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); }
         isShowingError = false;
     }
+
+    while (pendingSignals.length > 0) {
+        const next = pendingSignals.shift();
+        if (!next) { break; }
+        await consumeSignalFile(next.gitDir, next.signalFile, next.title, next.detail);
+    }
 }
 
 // SETS UP AND REGISTERS FS.WATCH FOR GIT SIGNAL FILES (PUSH_BLOCKED, PULL_DETECTED)
 // SHOWS MODAL ERRORS IF SIGNAL FILES APPEAR
 function ensureGitSignalWatcher(workspaceRoot: string): void {
-    if (signalWatchers.has(workspaceRoot)) { return; }
-
     const gitDir = resolveGitDir(workspaceRoot);
     if (!gitDir) { return; }
+
+    workspaceToGitDir.set(workspaceRoot, gitDir);
+    const existing = signalWatchers.get(gitDir);
+    if (existing) { existing.roots.add(workspaceRoot); return; }
 
     const processSignals = async (filenames?: string[]): Promise<void> => {
         const toCheck = filenames?.length ? filenames : [SIGNAL_FILES.PUSH_BLOCKED, SIGNAL_FILES.PULL_DETECTED];
@@ -59,7 +73,7 @@ function ensureGitSignalWatcher(workspaceRoot: string): void {
                     gitDir, SIGNAL_FILES.PULL_DETECTED,
                     'HEADS UP',
                     [
-                        'This repo has a "DONT COMMIT JUST SAVE" commit (example: from a pull).',
+                        'This repo has a "DONT COMMIT JUST SAVE" commit (for example after a pull/rebase/checkout).',
                         '',
                         '⚠ Remove or amend it first.'
                     ].join('\n')
@@ -68,7 +82,21 @@ function ensureGitSignalWatcher(workspaceRoot: string): void {
         }
     };
 
-    queueMicrotask(() => { void processSignals().catch(() => { /* IGNORE */ }); });
+    const checkForMarker = async (): Promise<void> => {
+        if (warnedRepos.has(gitDir)) { return; }
+        if (!hasRecentDontCommitMarker(workspaceRoot, 50)) { return; }
+        warnedRepos.add(gitDir);
+        await showNotification(
+            'info',
+            'Marker commit detected',
+            'This repo contains a "DONT COMMIT JUST SAVE" commit. Remove or amend it before pushing.'
+        );
+    };
+
+    queueMicrotask(() => {
+        void processSignals().catch(() => { /* IGNORE */ });
+        void checkForMarker().catch(() => { /* IGNORE */ });
+    });
 
     try {
         const watcher = watchFn(gitDir, (...args) => {
@@ -81,16 +109,23 @@ function ensureGitSignalWatcher(workspaceRoot: string): void {
             })().catch(() => { /* IGNORE */ });
         });
 
-        signalWatchers.set(workspaceRoot, watcher);
+        signalWatchers.set(gitDir, { watcher, roots: new Set([workspaceRoot]) });
     } catch {
-        // IGNORE WATCHER FAILURES (EXAMPLE: GIT DIR NOT WATCHABLE)
+        const poller = setInterval(() => { void processSignals().catch(() => { /* IGNORE */ }); }, 5000);
+        signalWatchers.set(gitDir, { poller, roots: new Set([workspaceRoot]) });
     }
 }
 
 // CLOSE AND CLEAR ALL ACTIVE GIT SIGNAL FILE WATCHERS.
 function disposeSignalWatchers(): void {
-    for (const watcher of signalWatchers.values()) { watcher.close(); }
+    for (const entry of signalWatchers.values()) {
+        if (entry.watcher) { entry.watcher.close(); }
+        if (entry.poller) { clearInterval(entry.poller); }
+    }
     signalWatchers.clear();
+    workspaceToGitDir.clear();
+    pendingSignals.length = 0;
+    warnedRepos.clear();
 }
 
 // RIGISTER WATCHER TO MONITOR GIT DIR FOR SIGNAL FILES
@@ -106,9 +141,21 @@ export function registerSignalWatcher(context: vscode.ExtensionContext): void {
 
         event.removed.forEach(folder => {
             const root = folder.uri.fsPath;
-            const watcher = signalWatchers.get(root);
-            if (watcher) { watcher.close(); }
-            signalWatchers.delete(root);
+            const gitDir = workspaceToGitDir.get(root);
+
+            workspaceToGitDir.delete(root);
+            if (!gitDir) { return; }
+
+            const entry = signalWatchers.get(gitDir);
+            if (!entry) { return; }
+            entry.roots.delete(root);
+
+            if (entry.roots.size === 0) {
+                if (entry.watcher) { entry.watcher.close(); }
+                if (entry.poller) { clearInterval(entry.poller); }
+                signalWatchers.delete(gitDir);
+                warnedRepos.delete(gitDir);
+            }
         });
     });
 

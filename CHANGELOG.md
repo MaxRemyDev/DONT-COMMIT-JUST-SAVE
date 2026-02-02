@@ -2,6 +2,19 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
+## [1.3.4] - Unreleased
+
+### Added
+
+-   `post-rewrite` and `post-checkout` hooks
+-   Startup marker warning
+
+### Changed
+
+-   Hooks respect worktrees and `core.hooksPath`
+-   Pre-push detection covers first push + per-ref ranges
+-   Multi-repo targeting + more resilient signal watcher
+
 ## [1.3.3] - 2026-02-02
 
 ### Added

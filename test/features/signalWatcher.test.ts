@@ -9,6 +9,7 @@ import { registerSignalWatcher, __test as signalWatcherTest } from '../../src/fe
 import { SIGNAL_FILES } from '../../src/constants';
 import * as gitHooks from '../../src/services/gitHooks';
 import * as notifications from '../../src/utils/notifications';
+import * as gitUtils from '../../src/utils/git';
 import { createMockExtensionContext } from '../helpers/extensionContext';
 
 // TESTS FOR SIGNAL WATCHER FEATURE
@@ -69,7 +70,7 @@ suite('signalWatcher Feature', () => {
         const callArgs = showErrorStub.getCall(0).args;
         assert.strictEqual(callArgs[0], 'HEADS UP');
         assert.deepStrictEqual(callArgs[1], {
-            detail: 'This repo has a "DONT COMMIT JUST SAVE" commit (example: from a pull).\n\n⚠ Remove or amend it first.',
+            detail: 'This repo has a "DONT COMMIT JUST SAVE" commit (for example after a pull/rebase/checkout).\n\n⚠ Remove or amend it first.',
             modal: true
         });
         assert.ok(!fs.existsSync(pullDetectedFile), 'PULL_DETECTED file should be removed after showing the modal');
@@ -198,6 +199,105 @@ suite('signalWatcher Feature', () => {
         await new Promise<void>(resolve => setImmediate(resolve));
         fs.unlinkSync(signalFile);
         resolveNotification?.();
+        await new Promise<void>(resolve => setImmediate(resolve));
+
+        // CLEANUP
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    // TEST FOR REGISTER SIGNAL WATCHER FUNCTION
+    test('registerSignalWatcher should show info when marker commit is detected', async () => {
+        // ARRANGE - TEMP REPO WITH GIT DIR
+        const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-commit-just-save-'));
+        const gitDir = path.join(tmpRepo, '.git');
+        fs.mkdirSync(gitDir, { recursive: true });
+        const mockFolder: vscode.WorkspaceFolder = { uri: vscode.Uri.file(tmpRepo), name: 'tmp-repo', index: 0 };
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([mockFolder]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders').returns({ dispose: () => { } } as any);
+        signalWatcherTest.setWatchFn(() => ({ close: () => { } }) as unknown as fs.FSWatcher);
+        sandbox.stub(gitUtils, 'hasRecentDontCommitMarker').returns(true);
+        const notifyStub = sandbox.stub(notifications, 'showNotification').resolves(undefined);
+
+        // ACT - REGISTER AND WAIT FOR MICROTASK
+        registerSignalWatcher(context);
+        await new Promise<void>(resolve => setImmediate(resolve));
+
+        // ASSERT - NOTIFY STUB CALLED WITH INFO
+        assert.ok(notifyStub.calledWith('info', 'Marker commit detected'));
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    // TEST FOR REGISTER SIGNAL WATCHER FUNCTION
+    test('registerSignalWatcher should poll when fs.watch fails', async () => {
+        // ARRANGE - TEMP REPO WITH GIT DIR
+        const clock = sandbox.useFakeTimers();
+        const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-commit-just-save-'));
+        const gitDir = path.join(tmpRepo, '.git');
+        fs.mkdirSync(gitDir, { recursive: true });
+        const mockFolder: vscode.WorkspaceFolder = { uri: vscode.Uri.file(tmpRepo), name: 'tmp-repo', index: 0 };
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([mockFolder]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders').returns({ dispose: () => { } } as any);
+        signalWatcherTest.setWatchFn(() => { throw new Error('watch failed'); });
+        sandbox.stub(gitUtils, 'hasRecentDontCommitMarker').returns(false);
+
+        // ACT - REGISTER AND TICK CLOCK
+        registerSignalWatcher(context);
+        clock.tick(5000);
+
+        // CLEANUP
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    // TEST FOR REGISTER SIGNAL WATCHER FUNCTION
+    test('registerSignalWatcher should skip marker check when repo already warned', async () => {
+        // ARRANGE - TEMP REPO WITH GIT DIR
+        const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-commit-just-save-'));
+        const gitDir = path.join(tmpRepo, '.git');
+        fs.mkdirSync(gitDir, { recursive: true });
+        const mockFolder: vscode.WorkspaceFolder = { uri: vscode.Uri.file(tmpRepo), name: 'tmp-repo', index: 0 };
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([mockFolder]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders').returns({ dispose: () => { } } as any);
+        signalWatcherTest.setWatchFn(() => ({ close: () => { } }) as unknown as fs.FSWatcher);
+        const markerStub = sandbox.stub(gitUtils, 'hasRecentDontCommitMarker').returns(true);
+        const notifyStub = sandbox.stub(notifications, 'showNotification').resolves(undefined);
+        signalWatcherTest.addWarnedRepo(gitDir);
+
+        // ACT - REGISTER AND WAIT FOR MICROTASK
+        registerSignalWatcher(context);
+        await new Promise<void>(resolve => setImmediate(resolve));
+
+        // ASSERT - MARKER STUB NOT CALLED, NOTIFY STUB NOT CALLED
+        assert.ok(markerStub.notCalled);
+        assert.ok(notifyStub.notCalled);
+        signalWatcherTest.clearWarnedRepos();
+
+        // CLEANUP
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    // TEST FOR REGISTER SIGNAL WATCHER FUNCTION
+    test('registerSignalWatcher should ignore undefined pending signals', async () => {
+        // ARRANGE - TEMP REPO WITH GIT DIR
+        const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-commit-just-save-'));
+        const gitDir = path.join(tmpRepo, '.git');
+        fs.mkdirSync(gitDir, { recursive: true });
+        const signalFile = path.join(gitDir, SIGNAL_FILES.PUSH_BLOCKED);
+        fs.writeFileSync(signalFile, '');
+        const mockFolder: vscode.WorkspaceFolder = { uri: vscode.Uri.file(tmpRepo), name: 'tmp-repo', index: 0 };
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([mockFolder]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders').returns({ dispose: () => { } } as any);
+
+        let watchCallback: ((eventType: string, filename?: string | Buffer) => void) | undefined;
+        signalWatcherTest.setWatchFn((...args: any[]) => {
+            watchCallback = args[1] as (eventType: string, filename?: string | Buffer) => void;
+            return { close: () => { } } as unknown as fs.FSWatcher;
+        });
+        sandbox.stub(notifications, 'showNotification').resolves(undefined);
+        signalWatcherTest.enqueuePendingSignal(undefined);
+
+        // ACT - REGISTER AND TRIGGER SIGNAL
+        registerSignalWatcher(context);
+        watchCallback?.('change', Buffer.from(SIGNAL_FILES.PUSH_BLOCKED));
         await new Promise<void>(resolve => setImmediate(resolve));
 
         // CLEANUP

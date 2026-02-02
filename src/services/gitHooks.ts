@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { resolveGitDir } from '../utils/git';
+import { resolveHooksDir } from '../utils/git';
+import { DONT_COMMIT_MESSAGE, SIGNAL_FILES } from '../constants';
 
 const MARKER_START = '# DONT-COMMIT-JUST-SAVE BEGIN';
 const MARKER_END = '# DONT-COMMIT-JUST-SAVE END';
@@ -54,33 +55,65 @@ function buildPrePushBlock(): string {
         '    git rev-parse --git-dir 2>/dev/null || echo ".git"',
         '}',
         '',
-        'dont_commit_just_save_check_push() {',
-        '    commits="$(git log @{u}..HEAD --pretty=%B 2>/dev/null || true)"',
-        '    if [ -z "$commits" ]; then',
-        '        return 0',
-        '    fi',
-        '',
-        '    if echo "$commits" | grep -q "DONT COMMIT JUST SAVE"; then',
-        '        git_dir="$(dont_commit_just_save_git_dir)"',
-        '        touch "$git_dir/PUSH_BLOCKED" 2>/dev/null || true',
-        '        sleep 2',
-        '',
-        '        echo ""',
-        '        echo "\\033[1;31m╔═══════════════════════════════════════════════╗"',
-        '        echo "║                   PUSH BLOCKED                ║"',
-        '        echo "║                                               ║"',
-        '        echo "║  Found commit with \'DONT COMMIT JUST SAVE\'    ║"',
-        '        echo "║  Please remove or amend the commit before push║"',
-        '        echo "║                                               ║"',
-        '        echo "╚═══════════════════════════════════════════════╝\\033[0m"',
-        '        echo ""',
+        'dont_commit_just_save_check_range() {',
+        `    if git log --pretty=%B "$@" 2>/dev/null | grep -Fqi "${DONT_COMMIT_MESSAGE}"; then`,
         '        return 1',
+        '    fi',
+        '    return 0',
+        '}',
+        '',
+        'dont_commit_just_save_check_recent() {',
+        `    if git log -n 50 --pretty=%B 2>/dev/null | grep -Fqi "${DONT_COMMIT_MESSAGE}"; then`,
+        '        return 1',
+        '    fi',
+        '    return 0',
+        '}',
+        '',
+        'dont_commit_just_save_check_push() {',
+        '    remote_name="$1"',
+        '    zero="0000000000000000000000000000000000000000"',
+        '    has_lines=0',
+        '    while IFS=" " read -r local_ref local_sha remote_ref remote_sha; do',
+        '        [ -z "$local_sha" ] && continue',
+        '        has_lines=1',
+        '        [ "$local_sha" = "$zero" ] && continue',
+        '        if [ "$remote_sha" = "$zero" ]; then',
+        '            if [ -n "$remote_name" ]; then',
+        '                dont_commit_just_save_check_range "$local_sha" --not --remotes="$remote_name" || return 1',
+        '            else',
+        '                dont_commit_just_save_check_range "$local_sha" || return 1',
+        '            fi',
+        '        else',
+        '            dont_commit_just_save_check_range "$remote_sha..$local_sha" || return 1',
+        '        fi',
+        '    done',
+        '',
+        '    if [ "$has_lines" -eq 0 ]; then',
+        '        upstream="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)"',
+        '        if [ -n "$upstream" ]; then',
+        '            dont_commit_just_save_check_range "$upstream..HEAD" || return 1',
+        '        else',
+        '            dont_commit_just_save_check_recent || return 1',
+        '        fi',
         '    fi',
         '',
         '    return 0',
         '}',
         '',
-        'if ! dont_commit_just_save_check_push; then',
+        'if ! dont_commit_just_save_check_push "$1"; then',
+        '    git_dir="$(dont_commit_just_save_git_dir)"',
+        `    touch "$git_dir/${SIGNAL_FILES.PUSH_BLOCKED}" 2>/dev/null || true`,
+        '    sleep 2',
+        '',
+        '    echo ""',
+        '    echo "\\033[1;31m╔═══════════════════════════════════════════════╗"',
+        '    echo "║                   PUSH BLOCKED                ║"',
+        '    echo "║                                               ║"',
+        `    echo "║  Found commit with '${DONT_COMMIT_MESSAGE}'    ║"`,
+        '    echo "║  Please remove or amend the commit before push║"',
+        '    echo "║                                               ║"',
+        '    echo "╚═══════════════════════════════════════════════╝\\033[0m"',
+        '    echo ""',
         '    exit 1',
         'fi',
     ].join('\n');
@@ -96,21 +129,75 @@ function buildPostMergeBlock(): string {
         'dont_commit_just_save_check_pull() {',
         '    git_dir="$(dont_commit_just_save_git_dir)"',
         '',
+        '    commits=""',
         '    if [ -f "$git_dir/ORIG_HEAD" ]; then',
         '        commits="$(git log ORIG_HEAD..HEAD --pretty=%B 2>/dev/null || true)"',
-        '    else',
+        '    fi',
+        '    if [ -z "$commits" ]; then',
         '        # FALLBACK: CHECK LAST 5 COMMITS IF ORIG_HEAD NOT AVAILABLE',
         '        commits="$(git log -5 --pretty=%B 2>/dev/null || true)"',
         '    fi',
         '',
-        '    if echo "$commits" | grep -q "DONT COMMIT JUST SAVE"; then',
-        '        touch "$git_dir/PULL_DETECTED" 2>/dev/null || true',
+        `    if echo "$commits" | grep -Fqi "${DONT_COMMIT_MESSAGE}"; then`,
+        `        touch "$git_dir/${SIGNAL_FILES.PULL_DETECTED}" 2>/dev/null || true`,
         '    fi',
         '',
         '    return 0',
         '}',
         '',
         'dont_commit_just_save_check_pull || true',
+    ].join('\n');
+}
+
+// BUILD POST-REWRITE HOOK BLOCK (AMEND/REBASE)
+function buildPostRewriteBlock(): string {
+    return [
+        'dont_commit_just_save_git_dir() {',
+        '    git rev-parse --git-dir 2>/dev/null || echo ".git"',
+        '}',
+        '',
+        'dont_commit_just_save_check_rewrite() {',
+        '    git_dir="$(dont_commit_just_save_git_dir)"',
+        '',
+        '    commits="$(git log ORIG_HEAD..HEAD --pretty=%B 2>/dev/null || true)"',
+        '    if [ -z "$commits" ]; then',
+        '        commits="$(git log -5 --pretty=%B 2>/dev/null || true)"',
+        '    fi',
+        '',
+        `    if echo "$commits" | grep -Fqi "${DONT_COMMIT_MESSAGE}"; then`,
+        `        touch "$git_dir/${SIGNAL_FILES.PULL_DETECTED}" 2>/dev/null || true`,
+        '    fi',
+        '',
+        '    return 0',
+        '}',
+        '',
+        'dont_commit_just_save_check_rewrite || true',
+    ].join('\n');
+}
+
+// BUILD POST-CHECKOUT HOOK BLOCK (BRANCH SWITCHES)
+function buildPostCheckoutBlock(): string {
+    return [
+        'dont_commit_just_save_git_dir() {',
+        '    git rev-parse --git-dir 2>/dev/null || echo ".git"',
+        '}',
+        '',
+        'dont_commit_just_save_check_checkout() {',
+        '    # $3 == 1 means branch checkout, 0 means file checkout',
+        '    if [ "$3" != "1" ]; then',
+        '        return 0',
+        '    fi',
+        '',
+        '    git_dir="$(dont_commit_just_save_git_dir)"',
+        '    commits="$(git log -5 --pretty=%B 2>/dev/null || true)"',
+        `    if echo "$commits" | grep -Fqi "${DONT_COMMIT_MESSAGE}"; then`,
+        `        touch "$git_dir/${SIGNAL_FILES.PULL_DETECTED}" 2>/dev/null || true`,
+        '    fi',
+        '',
+        '    return 0',
+        '}',
+        '',
+        'dont_commit_just_save_check_checkout "$@" || true',
     ].join('\n');
 }
 
@@ -121,10 +208,8 @@ export const setupGitHook = (workspaceRoot: string): void => {
         return;
     }
 
-    const gitDir = resolveGitDir(workspaceRoot);
-    if (!gitDir) { return; }
-
-    const hooksDir = path.join(gitDir, 'hooks');
+    const hooksDir = resolveHooksDir(workspaceRoot);
+    if (!hooksDir) { return; }
     try {
         fs.mkdirSync(hooksDir, { recursive: true });
 
@@ -135,8 +220,16 @@ export const setupGitHook = (workspaceRoot: string): void => {
         // SETUP POST-MERGE HOOK (TRIGGERED AFTER GIT PULL)
         const postMergeHookPath = path.join(hooksDir, 'post-merge');
         upsertHookBlock(postMergeHookPath, buildPostMergeBlock());
+
+        // SETUP POST-REWRITE HOOK (TRIGGERED AFTER REBASE/AMEND)
+        const postRewriteHookPath = path.join(hooksDir, 'post-rewrite');
+        upsertHookBlock(postRewriteHookPath, buildPostRewriteBlock());
+
+        // SETUP POST-CHECKOUT HOOK (TRIGGERED AFTER BRANCH SWITCH)
+        const postCheckoutHookPath = path.join(hooksDir, 'post-checkout');
+        upsertHookBlock(postCheckoutHookPath, buildPostCheckoutBlock());
     } catch (error) {
         const message = formatHookError(error);
         void vscode.window.showErrorMessage(`Hook setup failed: ${message}`);
     }
-}; 
+};

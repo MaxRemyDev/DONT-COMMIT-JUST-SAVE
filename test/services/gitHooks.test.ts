@@ -57,6 +57,20 @@ suite('Git Hooks Tests', () => {
         assert.ok(content.includes('PULL_DETECTED'), 'post-merge hook should create PULL_DETECTED file');
     });
 
+    // TEST FOR POST-REWRITE AND POST-CHECKOUT HOOK CREATION
+    test('setupGitHook should create post-rewrite and post-checkout hook files', async () => {
+        // ARRANGE - DEFINE HOOK PATHS
+        const postRewriteHookPath = path.join(testHooksDir, 'post-rewrite');
+        const postCheckoutHookPath = path.join(testHooksDir, 'post-checkout');
+
+        // ACT - SETUP GIT HOOK
+        await setupGitHook(testWorkspaceRoot);
+
+        // ASSERT - VERIFY HOOK FILES CREATED
+        assert.ok(fs.existsSync(postRewriteHookPath), 'post-rewrite hook should be created');
+        assert.ok(fs.existsSync(postCheckoutHookPath), 'post-checkout hook should be created');
+    });
+
     // TEST FOR HOOK FILE PERMISSIONS
     test('setupGitHook should set executable permissions on hook files', async () => {
         // ARRANGE - DEFINE HOOK PATHS
@@ -97,8 +111,9 @@ suite('Git Hooks Tests', () => {
         // ASSERT - VERIFY HOOK CONTENT
         const prePushHookPath = path.join(testHooksDir, 'pre-push');
         const content = fs.readFileSync(prePushHookPath, 'utf8');
-        assert.ok(content.includes('git log @{u}..HEAD'), 'pre-push hook should check commits between upstream and HEAD');
-        assert.ok(content.includes('grep -q "DONT COMMIT JUST SAVE"'), 'pre-push hook should grep for DONT COMMIT JUST SAVE');
+        assert.ok(content.includes('dont_commit_just_save_check_range'), 'pre-push hook should check commit ranges');
+        assert.ok(content.includes('rev-parse --abbrev-ref --symbolic-full-name @{u}'), 'pre-push hook should detect upstream');
+        assert.ok(content.includes('grep -Fqi "DONT COMMIT JUST SAVE"'), 'pre-push hook should grep for DONT COMMIT JUST SAVE');
     });
 
     // TEST FOR POST-MERGE HOOK CONTENT

@@ -24,7 +24,7 @@ suite('softReset Feature', () => {
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
@@ -33,8 +33,9 @@ suite('softReset Feature', () => {
         sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
 
         const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
-        execFileSyncStub.onFirstCall().returns('fix: something\n');
-        execFileSyncStub.onSecondCall().returns(Buffer.from(''));
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('fix: something\0');
+        execFileSyncStub.onThirdCall().returns(Buffer.from(''));
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -43,11 +44,14 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - LOG + RESET HEAD~2
-        assert.strictEqual(execFileSyncStub.callCount, 2);
-        const logCall = execFileSyncStub.getCall(0).args as [string, string[], { cwd?: string; encoding?: string }];
+        assert.strictEqual(execFileSyncStub.callCount, 3);
+        const headCall = execFileSyncStub.getCall(0).args as [string, string[], { cwd?: string; encoding?: string }];
+        assert.strictEqual(headCall[0], 'git');
+        assert.deepStrictEqual(headCall[1], ['rev-parse', '--verify', 'HEAD']);
+        const logCall = execFileSyncStub.getCall(1).args as [string, string[], { cwd?: string; encoding?: string }];
         assert.strictEqual(logCall[0], 'git');
-        assert.deepStrictEqual(logCall[1], ['log', '-n', '50', '--pretty=%s']);
-        const resetCall = execFileSyncStub.getCall(1).args as [string, string[], { cwd?: string }];
+        assert.deepStrictEqual(logCall[1], ['log', '-n', '50', '--pretty=%B%x00']);
+        const resetCall = execFileSyncStub.getCall(2).args as [string, string[], { cwd?: string }];
         assert.strictEqual(resetCall[0], 'git');
         assert.deepStrictEqual(resetCall[1], ['reset', '--soft', 'HEAD~2']);
         assert.strictEqual(resetCall[2].cwd, '/test/repo');
@@ -59,7 +63,7 @@ suite('softReset Feature', () => {
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
@@ -68,8 +72,9 @@ suite('softReset Feature', () => {
         sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
 
         const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
-        execFileSyncStub.onFirstCall().returns(`${dcjs}\n${dcjs}\n${dcjs}\n`);
-        execFileSyncStub.onSecondCall().returns(Buffer.from(''));
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns(`${dcjs}\0${dcjs}\0${dcjs}\0`);
+        execFileSyncStub.onThirdCall().returns(Buffer.from(''));
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -78,8 +83,8 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - RESET HEAD~3
-        assert.strictEqual(execFileSyncStub.callCount, 2);
-        assert.deepStrictEqual(execFileSyncStub.getCall(1).args[1], ['reset', '--soft', 'HEAD~3']);
+        assert.strictEqual(execFileSyncStub.callCount, 3);
+        assert.deepStrictEqual(execFileSyncStub.getCall(2).args[1], ['reset', '--soft', 'HEAD~3']);
     });
 
     // TESTS FOR SOFT RESET HEAD COMMAND WHEN USER CANCELS SUGGESTION DIALOG
@@ -88,13 +93,15 @@ suite('softReset Feature', () => {
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
         sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Cancel' } as any);
 
-        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns('DONT COMMIT JUST SAVE\n');
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('DONT COMMIT JUST SAVE\0');
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -103,7 +110,7 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - LOG ONLY
-        assert.strictEqual(execFileSyncStub.callCount, 1);
+        assert.strictEqual(execFileSyncStub.callCount, 2);
     });
 
     // TESTS FOR SOFT RESET HEAD COMMAND WHEN INPUT IS CANCELLED
@@ -112,13 +119,15 @@ suite('softReset Feature', () => {
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
         sandbox.stub(vscode.window, 'showInputBox').resolves(undefined);
 
-        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns('fix: other\n');
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('fix: other\0');
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -127,7 +136,7 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - LOG ONLY
-        assert.strictEqual(execFileSyncStub.callCount, 1);
+        assert.strictEqual(execFileSyncStub.callCount, 2);
     });
 
     // TESTS FOR SOFT RESET HEAD COMMAND WHEN USER CANCELS CONFIRMATION AFTER MANUAL INPUT
@@ -136,14 +145,16 @@ suite('softReset Feature', () => {
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
         sandbox.stub(vscode.window, 'showInputBox').resolves('2');
         sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Cancel' } as any);
 
-        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns('fix: msg\n');
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('fix: msg\0');
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -152,7 +163,7 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - LOG ONLY
-        assert.strictEqual(execFileSyncStub.callCount, 1);
+        assert.strictEqual(execFileSyncStub.callCount, 2);
     });
 
     // TESTS FOR MANUAL INPUT VALIDATION
@@ -161,7 +172,7 @@ suite('softReset Feature', () => {
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
@@ -172,7 +183,9 @@ suite('softReset Feature', () => {
         });
         sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Cancel' } as any);
 
-        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync').returns('fix: msg\n');
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('fix: msg\0');
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -181,7 +194,7 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - VALIDATION RULES
-        assert.strictEqual(execFileSyncStub.callCount, 1);
+        assert.strictEqual(execFileSyncStub.callCount, 2);
         assert.ok(validateInput, 'validateInput should be provided');
         const runValidate = validateInput as (value: string) => string | undefined;
         assert.strictEqual(runValidate(''), 'Enter a number');
@@ -216,7 +229,7 @@ suite('softReset Feature', () => {
         // ARRANGE - EMPTY REPOS
         const mockGit = { repositories: [] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
@@ -233,52 +246,20 @@ suite('softReset Feature', () => {
         assert.ok(showNotificationStub.getCall(0).args[0].includes('No Git repo'));
     });
 
-    // TESTS FOR SOFT RESET HEAD COMMAND WHEN GIT LOG FAILS
-    test('softResetHead command should fallback to manual input when git log fails', async () => {
-        // ARRANGE - LOG THROWS, INPUT 1, CONFIRM
+    // TESTS FOR SOFT RESET HEAD COMMAND WHEN REPO HAS NO COMMITS
+    test('softResetHead command should show error when repo has no commits', async () => {
+        // ARRANGE - NO COMMITS
         const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [mockRepo] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
-        sandbox.stub(vscode.window, 'showInputBox').resolves('1');
-        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Reset' } as any);
-        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
-
-        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
-        execFileSyncStub.onFirstCall().throws(new Error('not a git repo'));
-        execFileSyncStub.onSecondCall().returns(Buffer.from(''));
-
-        // ACT - ACTIVATE + SOFT RESET
-        await activate(context);
-        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
-        assert.ok(commandCall);
-        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
-
-        // ASSERT - RESET HEAD~1
-        assert.strictEqual(execFileSyncStub.callCount, 2);
-        assert.deepStrictEqual(execFileSyncStub.getCall(1).args[1], ['reset', '--soft', 'HEAD~1']);
-    });
-
-    // TESTS FOR SOFT RESET HEAD COMMAND WHEN GIT RESET FAILS
-    test('softResetHead command should show error when git reset fails', async () => {
-        // ARRANGE - RESET THROWS
-        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
-        const mockGit = { repositories: [mockRepo] };
-        const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
-        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
-        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
-        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
-        sandbox.stub(vscode.window, 'showInputBox').resolves('2');
-        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Reset' } as any);
         const showErrorStub = sandbox.stub(vscode.window, 'showErrorMessage').resolves(undefined);
 
         const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
-        execFileSyncStub.onFirstCall().returns('fix: x\n');
-        execFileSyncStub.onSecondCall().throws(Object.assign(new Error('reset failed'), { stderr: Buffer.from('fatal: ...') }));
+        execFileSyncStub.onFirstCall().throws(new Error('no commits'));
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -287,7 +268,68 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - ERROR SHOWN
-        assert.strictEqual(execFileSyncStub.callCount, 2);
+        assert.strictEqual(execFileSyncStub.callCount, 1);
+        assert.ok(showErrorStub.calledOnce);
+        assert.ok(showErrorStub.getCall(0).args[0].includes('No commits to reset'));
+    });
+
+    // TESTS FOR SOFT RESET HEAD COMMAND WHEN GIT LOG FAILS
+    test('softResetHead command should fallback to manual input when git log fails', async () => {
+        // ARRANGE - LOG THROWS, INPUT 1, CONFIRM
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        sandbox.stub(vscode.window, 'showInputBox').resolves('1');
+        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Reset' } as any);
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().throws(new Error('not a git repo'));
+        execFileSyncStub.onThirdCall().returns(Buffer.from(''));
+
+        // ACT - ACTIVATE + SOFT RESET
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall);
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - RESET HEAD~1
+        assert.strictEqual(execFileSyncStub.callCount, 3);
+        assert.deepStrictEqual(execFileSyncStub.getCall(2).args[1], ['reset', '--soft', 'HEAD~1']);
+    });
+
+    // TESTS FOR SOFT RESET HEAD COMMAND WHEN GIT RESET FAILS
+    test('softResetHead command should show error when git reset fails', async () => {
+        // ARRANGE - RESET THROWS
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        sandbox.stub(vscode.window, 'showInputBox').resolves('2');
+        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Reset' } as any);
+        const showErrorStub = sandbox.stub(vscode.window, 'showErrorMessage').resolves(undefined);
+
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('fix: x\0');
+        execFileSyncStub.onThirdCall().throws(Object.assign(new Error('reset failed'), { stderr: Buffer.from('fatal: ...') }));
+
+        // ACT - ACTIVATE + SOFT RESET
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall);
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - ERROR SHOWN
+        assert.strictEqual(execFileSyncStub.callCount, 3);
         assert.ok(showErrorStub.calledOnce);
         assert.ok(showErrorStub.getCall(0).args[0].includes('Reset failed'));
     });
@@ -299,7 +341,7 @@ suite('softReset Feature', () => {
         const repoB = { rootUri: vscode.Uri.file('/b'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [repoA, repoB] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
@@ -309,8 +351,9 @@ suite('softReset Feature', () => {
         sandbox.stub(vscode.window, 'showQuickPick').resolves({ label: 'b', description: '/b', repo: repoB } as any);
 
         const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
-        execFileSyncStub.onFirstCall().returns('fix: y\n');
-        execFileSyncStub.onSecondCall().returns(Buffer.from(''));
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('fix: y\0');
+        execFileSyncStub.onThirdCall().returns(Buffer.from(''));
 
         // ACT - ACTIVATE + SOFT RESET
         await activate(context);
@@ -319,8 +362,8 @@ suite('softReset Feature', () => {
         if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
 
         // ASSERT - RESET CWD /b
-        assert.strictEqual(execFileSyncStub.callCount, 2);
-        const resetOpts = execFileSyncStub.getCall(1).args[2] as { cwd: string } | undefined;
+        assert.strictEqual(execFileSyncStub.callCount, 3);
+        const resetOpts = execFileSyncStub.getCall(2).args[2] as { cwd: string } | undefined;
         assert.strictEqual(resetOpts?.cwd, '/b');
     });
 
@@ -331,7 +374,7 @@ suite('softReset Feature', () => {
         const repoB = { rootUri: vscode.Uri.file('/b'), state: { onDidChange: () => ({ dispose: () => { } }) } };
         const mockGit = { repositories: [repoA, repoB] };
         const mockGitExtension = { getAPI: () => mockGit };
-        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension } as vscode.Extension<any>);
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
         sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
         sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
         const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
