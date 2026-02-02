@@ -15,19 +15,19 @@ Blocks git pushes when any commit message contains `DONT COMMIT JUST SAVE`.
 
 **Feature 1** - Inserts `DONT COMMIT JUST SAVE` into the commit message, then blocks pushes in VS Code until it’s removed/amended.
 
-<img width="1818" height="500" alt="INSERT_DCJS_PUSH_BLOCK" src="https://github.com/user-attachments/assets/d29a9d34-8806-429e-9ffd-dadb0ccc64c8" />
+<img width="1200" alt="INSERT_DCJS_PUSH_BLOCK" src="https://github.com/user-attachments/assets/d29a9d34-8806-429e-9ffd-dadb0ccc64c8" />
 
 ---
 
 **Feature 2** - One-click `git reset --soft HEAD~N` (auto-suggests N) to drop marker commits while keeping changes staged.
 
-<img width="1818" height="500" alt="SOFT_RESET" src="https://github.com/user-attachments/assets/4dd8dd0d-01bd-4524-a47e-aa92a588b7ed" />
+<img width="1200" alt="SOFT_RESET" src="https://github.com/user-attachments/assets/4dd8dd0d-01bd-4524-a47e-aa92a588b7ed" />
 
 ---
 
 **Feature 3** - Same protection in the terminal: `git push` is blocked if a marker commit exists.
 
-<img width="2260" height="697" alt="TERMINAL" src="https://github.com/user-attachments/assets/464a811b-8302-4858-b8c0-385c13cf8b84" />
+<img width="1200" alt="TERMINAL" src="https://github.com/user-attachments/assets/464a811b-8302-4858-b8c0-385c13cf8b84" />
 
 ## TRY NOW
 
