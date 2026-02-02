@@ -2,7 +2,7 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
-## [1.3.3] - 2026-02-01
+## [1.3.3] - 2026-02-02
 
 ### Added
 
