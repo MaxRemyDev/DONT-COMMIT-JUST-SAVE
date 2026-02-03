@@ -2,13 +2,13 @@
 
 All notable changes to the "DONT COMMIT JUST SAVE" extension will be documented in this file.
 
-## [1.3.4] - Unreleased
+## [1.3.4] - 2026-02-03
 
 ### Added
 
--   `post-rewrite` and `post-checkout` hooks
--   Startup marker warning
 -   Custom count option when consecutive "DONT COMMIT JUST SAVE" commits are detected in soft reset
+-   Startup marker warning
+-   `post-rewrite` and `post-checkout` hooks
 
 ### Changed
 
