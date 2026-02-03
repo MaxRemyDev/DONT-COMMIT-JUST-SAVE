@@ -87,6 +87,73 @@ suite('softReset Feature', () => {
         assert.deepStrictEqual(execFileSyncStub.getCall(2).args[1], ['reset', '--soft', 'HEAD~3']);
     });
 
+    // TESTS FOR CUSTOM RESET COUNT WHEN CONSECUTIVE DCJS COMMITS EXIST
+    test('softResetHead command should allow custom reset count when consecutive DCJS commits exist', async () => {
+        // ARRANGE - 3 DCJS, CHOOSE NUMBER, INPUT 2, CONFIRM
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        let validateInput: vscode.InputBoxOptions['validateInput'];
+        sandbox.stub(vscode.window, 'showInputBox').callsFake(async options => {
+            validateInput = options?.validateInput;
+            return '2';
+        });
+        const warningStub = sandbox.stub(vscode.window, 'showWarningMessage');
+        warningStub.onFirstCall().resolves({ title: 'Choose number...' } as any);
+        warningStub.onSecondCall().resolves({ title: 'Reset 2' } as any);
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('DONT COMMIT JUST SAVE\0DONT COMMIT JUST SAVE\0DONT COMMIT JUST SAVE\0');
+        execFileSyncStub.onThirdCall().returns(Buffer.from(''));
+
+        // ACT - ACTIVATE + SOFT RESET
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall);
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - VALIDATION + RESET HEAD~2
+        assert.ok(validateInput, 'validateInput should be provided');
+        const runValidate = validateInput as (value: string) => string | undefined;
+        assert.strictEqual(runValidate('4'), 'Use 3 or less');
+        assert.strictEqual(runValidate('2'), undefined);
+        assert.strictEqual(execFileSyncStub.callCount, 3);
+        assert.deepStrictEqual(execFileSyncStub.getCall(2).args[1], ['reset', '--soft', 'HEAD~2']);
+    });
+
+    // TESTS FOR CUSTOM INPUT CANCEL WHEN CONSECUTIVE DCJS COMMITS EXIST
+    test('softResetHead command should not run reset when custom input is cancelled', async () => {
+        // ARRANGE - 2 DCJS, CHOOSE NUMBER, CANCEL INPUT
+        const mockRepo = { rootUri: vscode.Uri.file('/test/repo'), state: { onDidChange: () => ({ dispose: () => { } }) } };
+        const mockGit = { repositories: [mockRepo] };
+        const mockGitExtension = { getAPI: () => mockGit };
+        sandbox.stub(vscode.extensions, 'getExtension').returns({ exports: mockGitExtension, isActive: true } as vscode.Extension<any>);
+        sandbox.stub(vscode.workspace, 'workspaceFolders').value([]);
+        sandbox.stub(vscode.workspace, 'onDidChangeWorkspaceFolders');
+        const registerCommandStub = sandbox.stub(vscode.commands, 'registerCommand');
+        sandbox.stub(vscode.window, 'showInputBox').resolves(undefined);
+        sandbox.stub(vscode.window, 'showWarningMessage').resolves({ title: 'Choose number...' } as any);
+
+        const execFileSyncStub = sandbox.stub(childProcess, 'execFileSync');
+        execFileSyncStub.onFirstCall().returns('HEADHASH\n');
+        execFileSyncStub.onSecondCall().returns('DONT COMMIT JUST SAVE\0DONT COMMIT JUST SAVE\0');
+
+        // ACT - ACTIVATE + SOFT RESET
+        await activate(context);
+        const commandCall = registerCommandStub.getCalls().find(call => call.args[0] === 'extension.softResetHead');
+        assert.ok(commandCall);
+        if (commandCall && typeof commandCall.args[1] === 'function') { await commandCall.args[1](); }
+
+        // ASSERT - LOG ONLY
+        assert.strictEqual(execFileSyncStub.callCount, 2);
+    });
+
     // TESTS FOR SOFT RESET HEAD COMMAND WHEN USER CANCELS SUGGESTION DIALOG
     test('softResetHead command should not run reset when user cancels suggestion dialog', async () => {
         // ARRANGE - DCJS, CANCEL

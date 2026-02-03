@@ -41,11 +41,41 @@ export function registerSoftReset(context: vscode.ExtensionContext): void {
                 `Reset last ${consecutiveCount} 'DONT COMMIT JUST SAVE' commit${consecutiveCount > 1 ? 's' : ''} ?`,
                 { modal: true, detail: resetConfirmDetail },
                 { title: `Reset ${consecutiveCount}` },
+                { title: 'Choose number...' },
                 { title: 'Cancel', isCloseAffordance: true }
             );
 
-            if (confirm?.title !== `Reset ${consecutiveCount}`) { return; }
-            count = consecutiveCount;
+            if (!confirm || confirm.title === 'Cancel') { return; }
+
+            if (confirm.title === `Reset ${consecutiveCount}`) {
+                count = consecutiveCount;
+            } else {
+                const rawCount = await vscode.window.showInputBox({
+                    title: 'Git soft reset',
+                    prompt: `How many "DONT COMMIT JUST SAVE" commits (1-${consecutiveCount}) ?`,
+                    value: String(consecutiveCount),
+                    validateInput: (value: string) => {
+                        const trimmed = value.trim();
+                        if (trimmed.length === 0) { return 'Enter a number'; }
+                        const n = Number(trimmed);
+                        if (!Number.isInteger(n) || n < 1) { return 'Use 1 or more'; }
+                        if (n > consecutiveCount) { return `Use ${consecutiveCount} or less`; }
+                        return undefined;
+                    }
+                });
+
+                if (!rawCount) { return; }
+                count = Number(rawCount.trim());
+
+                const confirmCustom = await vscode.window.showWarningMessage(
+                    `Reset last ${count} 'DONT COMMIT JUST SAVE' commit${count > 1 ? 's' : ''} ?`,
+                    { modal: true, detail: resetConfirmDetail },
+                    { title: `Reset ${count}` },
+                    { title: 'Cancel', isCloseAffordance: true }
+                );
+
+                if (confirmCustom?.title !== `Reset ${count}`) { return; }
+            }
         } else {
             const rawCount = await vscode.window.showInputBox({
                 title: 'Git soft reset',
